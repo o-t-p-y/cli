@@ -35,6 +35,34 @@ describe("OtpyClient", () => {
     const fetchFn = mockFetch(200, { verified: true });
     const client = new OtpyClient({ apiKey: "k", fetch: fetchFn });
     await expect(client.verifyOtp("09120000000", "123456")).resolves.toEqual({ verified: true });
+
+    const fetchFalse = mockFetch(200, { verified: false });
+    const clientFalse = new OtpyClient({ apiKey: "k", fetch: fetchFalse });
+    await expect(clientFalse.verifyOtp("09120000000", "999999")).resolves.toEqual({ verified: false });
+  });
+
+  it("rejects empty verification code before network", async () => {
+    const fetchFn = mockFetch(200, {});
+    const client = new OtpyClient({ apiKey: "k", fetch: fetchFn });
+    await expect(client.verifyOtp("09120000000", "")).rejects.toMatchObject({ code: "bad_otp" });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("fetches usage statistics", async () => {
+    const fetchFn = mockFetch(200, {
+      free_used_today: 3,
+      free_quota_today: 10,
+      paid_today: 1,
+      daily_limit: 100,
+    });
+    const client = new OtpyClient({ apiKey: "k", fetch: fetchFn });
+    const usage = await client.usage();
+    expect(usage).toEqual({
+      free_used_today: 3,
+      free_quota_today: 10,
+      paid_today: 1,
+      daily_limit: 100,
+    });
   });
 
   it("maps non-2xx responses to OtpyError with the server code", async () => {
