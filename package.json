@@ -1,6 +1,6 @@
 {
   "name": "otpy-cli",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "npx otpy init — one-command OTPy integration (framework detection, code patching, PR creation, AI mode). Published as `otpy` in P4.",
