@@ -1,6 +1,6 @@
 {
   "name": "otpy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OTPy.ir TypeScript SDK — send and verify login OTPs in seconds.",
   "type": "module",
   "license": "MIT",
