@@ -122,6 +122,147 @@ export async function POST(request) {
   ];
 }
 
+export function generateNextPagesTemplates(hasSrcPages: boolean, isTs: boolean): GeneratedFile[] {
+  const prefix = hasSrcPages ? "src/" : "";
+  const ext = isTs ? "ts" : "js";
+
+  const clientCode = isTs
+    ? `import { OtpyClient } from "otpy";
+
+export const otpy = new OtpyClient({
+  apiKey: process.env.OTPY_API_KEY!,
+});
+`
+    : `import { OtpyClient } from "otpy";
+
+export const otpy = new OtpyClient({
+  apiKey: process.env.OTPY_API_KEY,
+});
+`;
+
+  const sendHandlerCode = isTs
+    ? `import type { NextApiRequest, NextApiResponse } from "next";
+import { OtpyError } from "otpy";
+import { otpy } from "../../../../lib/otpy";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "فقط متد POST مجاز است" });
+  }
+
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "شماره موبایل الزامی است" });
+    }
+
+    const result = await otpy.sendOtp(phone);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return res.status(error.status || 500).json({ error: error.code });
+    }
+    return res.status(500).json({ error: "خطا در ارسال پیامک" });
+  }
+}
+`
+    : `import { OtpyError } from "otpy";
+import { otpy } from "../../../../lib/otpy";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "فقط متد POST مجاز است" });
+  }
+
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "شماره موبایل الزامی است" });
+    }
+
+    const result = await otpy.sendOtp(phone);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return res.status(error.status || 500).json({ error: error.code });
+    }
+    return res.status(500).json({ error: "خطا در ارسال پیامک" });
+  }
+}
+`;
+
+  const verifyHandlerCode = isTs
+    ? `import type { NextApiRequest, NextApiResponse } from "next";
+import { OtpyError } from "otpy";
+import { otpy } from "../../../../lib/otpy";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "فقط متد POST مجاز است" });
+  }
+
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ error: "شماره موبایل و کد ورود الزامی است" });
+    }
+
+    const result = await otpy.verifyOtp(phone, code);
+    if (!result.verified) {
+      return res.status(401).json({ verified: false, error: "کد وارد شده اشتباه یا منقضی است" });
+    }
+
+    // TODO: احراز هویت موفق بود. اینجا سشن یا توکن لاگین کاربر را صادر کنید.
+    return res.status(200).json({ verified: true });
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return res.status(error.status || 500).json({ error: error.code });
+    }
+    return res.status(500).json({ error: "خطا در بررسی کد" });
+  }
+}
+`
+    : `import { OtpyError } from "otpy";
+import { otpy } from "../../../../lib/otpy";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "فقط متد POST مجاز است" });
+  }
+
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ error: "شماره موبایل و کد ورود الزامی است" });
+    }
+
+    const result = await otpy.verifyOtp(phone, code);
+    if (!result.verified) {
+      return res.status(401).json({ verified: false, error: "کد وارد شده اشتباه یا منقضی است" });
+    }
+
+    // TODO: احراز هویت موفق بود. اینجا سشن یا توکن لاگین کاربر را صادر کنید.
+    return res.status(200).json({ verified: true });
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return res.status(error.status || 500).json({ error: error.code });
+    }
+    return res.status(500).json({ error: "خطا در بررسی کد" });
+  }
+}
+`;
+
+  return [
+    { path: `${prefix}lib/otpy.${ext}`, content: clientCode },
+    { path: `${prefix}pages/api/auth/otp/send.${ext}`, content: sendHandlerCode },
+    { path: `${prefix}pages/api/auth/otp/verify.${ext}`, content: verifyHandlerCode },
+  ];
+}
+
 export function generateSvelteKitTemplates(): GeneratedFile[] {
   const clientCode = `import { OtpyClient } from "otpy";
 import { env } from "$env/dynamic/private";

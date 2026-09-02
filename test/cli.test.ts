@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { detectProject } from "../src/detector.js";
+import { detectNextPagesRoot, detectProject } from "../src/detector.js";
 import { appendOrUpdateEnvKey, getExistingEnvKey } from "../src/env.js";
 import {
   generateExpressTemplates,
   generateGoTemplates,
   generateNextAppTemplates,
+  generateNextPagesTemplates,
   generatePythonFastApiTemplates,
   generateSvelteKitTemplates,
 } from "../src/templates.js";
@@ -28,7 +29,7 @@ describe("otpy cli detector & env", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("detects Next.js app router and tsconfig", () => {
+  it("detects Next.js pages router (no app dir) and tsconfig", () => {
     writeFileSync(
       join(tempDir, "package.json"),
       JSON.stringify({ dependencies: { next: "15.0.0", react: "19.0.0" } }),
@@ -232,5 +233,232 @@ describe("otpy cli sveltekit template", () => {
     expect(result.status).toBe(0);
     expect(readFileSync(join(tempDir, "src/lib/otpy.ts"), "utf8")).toBe(marker);
     expect(result.stdout).toContain("رد شد");
+  });
+});
+
+describe("otpy cli next-pages template", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-nextpages-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  type PagesLayout = "root" | "src" | "both" | "none";
+
+  function writeNextFixture(dir: string, pages: PagesLayout, withAppDir = false): void {
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: "next-fixture",
+        private: true,
+        dependencies: { next: "15.0.0", react: "19.0.0" },
+      }),
+    );
+    writeFileSync(join(dir, "tsconfig.json"), "{}");
+    writeFileSync(join(dir, ".env"), "PORT=3000\n");
+    if (withAppDir) {
+      mkdirSync(join(dir, "app"), { recursive: true });
+    }
+    if (pages === "root" || pages === "both") {
+      mkdirSync(join(dir, "pages"), { recursive: true });
+    }
+    if (pages === "src" || pages === "both") {
+      mkdirSync(join(dir, "src", "pages"), { recursive: true });
+    }
+  }
+
+  function listFiles(root: string): string[] {
+    return readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((entry) => statSync(join(root, entry)).isFile())
+      .sort();
+  }
+
+  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    return spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
+      { cwd: dir, encoding: "utf8" },
+    );
+  }
+
+  it("detects next-app when an app dir exists, even alongside a pages dir", () => {
+    // Given: a Next project with BOTH an app dir and a root pages dir
+    writeNextFixture(tempDir, "root", true);
+
+    // When: the CLI detects the project
+    const info = detectProject(tempDir);
+
+    // Then: the App Router wins — the pages dir must not shadow it
+    expect(info.framework).toBe("next-app");
+  });
+
+  it("detects the pages root with root pages/ winning over src/pages/", () => {
+    // Given: only a root pages dir
+    writeNextFixture(tempDir, "root");
+    expect(detectNextPagesRoot(tempDir)).toBe("pages");
+
+    // And: only a src/pages dir
+    const srcDir = mkdtempSync(join(tmpdir(), "otpy-cli-nextpages-src-"));
+    try {
+      writeNextFixture(srcDir, "src");
+      expect(detectNextPagesRoot(srcDir)).toBe("src/pages");
+
+      // And: both dirs present — Next.js ignores src/pages when root pages exists
+      mkdirSync(join(srcDir, "pages"), { recursive: true });
+      expect(detectNextPagesRoot(srcDir)).toBe("pages");
+
+      // And: neither dir present — default to the canonical root pages location
+      rmSync(join(srcDir, "pages"), { recursive: true });
+      rmSync(join(srcDir, "src", "pages"), { recursive: true });
+      expect(detectNextPagesRoot(srcDir)).toBe("pages");
+    } finally {
+      rmSync(srcDir, { recursive: true, force: true });
+    }
+  });
+
+  it("generates root pages-router files with NextApiRequest/NextApiResponse handlers", () => {
+    const files = generateNextPagesTemplates(false, true);
+
+    expect(files.map((f) => f.path)).toEqual([
+      "lib/otpy.ts",
+      "pages/api/auth/otp/send.ts",
+      "pages/api/auth/otp/verify.ts",
+    ]);
+
+    for (const file of files) {
+      expect(file.content).not.toContain("app/api");
+      expect(file.content).not.toContain("next/server");
+      expect(file.content).not.toContain("NextResponse");
+    }
+
+    for (const routeFile of files.filter((f) => f.path.includes("pages/api"))) {
+      expect(routeFile.content).toContain('from "next"');
+      expect(routeFile.content).toContain("NextApiRequest");
+      expect(routeFile.content).toContain("NextApiResponse");
+      expect(routeFile.content).toContain("export default");
+      expect(routeFile.content).toContain("../../../../lib/otpy");
+    }
+  });
+
+  it("generates src pages-router files preserving the detected src root", () => {
+    const files = generateNextPagesTemplates(true, true);
+
+    expect(files.map((f) => f.path)).toEqual([
+      "src/lib/otpy.ts",
+      "src/pages/api/auth/otp/send.ts",
+      "src/pages/api/auth/otp/verify.ts",
+    ]);
+
+    for (const routeFile of files.filter((f) => f.path.includes("pages/api"))) {
+      // four levels up from src/pages/api/auth/otp lands on src/ — same depth as the root layout
+      expect(routeFile.content).toContain("../../../../lib/otpy");
+    }
+  });
+
+  it("generates JavaScript variants for non-TypeScript projects", () => {
+    const files = generateNextPagesTemplates(false, false);
+
+    expect(files.map((f) => f.path)).toEqual([
+      "lib/otpy.js",
+      "pages/api/auth/otp/send.js",
+      "pages/api/auth/otp/verify.js",
+    ]);
+    for (const routeFile of files.filter((f) => f.path.includes("pages/api"))) {
+      expect(routeFile.content).not.toContain("NextApiRequest");
+      expect(routeFile.content).toContain("export default");
+    }
+  });
+
+  it("init on a root pages/ project creates only pages-router files (no App Router fall-through)", () => {
+    writeNextFixture(tempDir, "root");
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("next-pages");
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([
+      "lib/otpy.ts",
+      "pages/api/auth/otp/send.ts",
+      "pages/api/auth/otp/verify.ts",
+    ]);
+
+    // Then: no App Router artifacts appear and the existing .env keys survive
+    expect(existsSync(join(tempDir, "app/api/auth/otp/send/route.ts"))).toBe(false);
+    expect(existsSync(join(tempDir, "src/pages/api/auth/otp/send.ts"))).toBe(false);
+
+    const env = readFileSync(join(tempDir, ".env"), "utf8");
+    expect(env).toContain("PORT=3000");
+    expect(env).toContain("OTPY_API_KEY=otpy_test_key_123");
+  });
+
+  it("init on a src/pages/ project writes under src/", () => {
+    writeNextFixture(tempDir, "src");
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([
+      "src/lib/otpy.ts",
+      "src/pages/api/auth/otp/send.ts",
+      "src/pages/api/auth/otp/verify.ts",
+    ]);
+
+    expect(existsSync(join(tempDir, "pages/api/auth/otp/send.ts"))).toBe(false);
+  });
+
+  it("init prefers root pages/ when both pages/ and src/pages/ exist", () => {
+    writeNextFixture(tempDir, "both");
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(existsSync(join(tempDir, "pages/api/auth/otp/send.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "pages/api/auth/otp/verify.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "src/pages/api/auth/otp/send.ts"))).toBe(false);
+    expect(existsSync(join(tempDir, "src/lib/otpy.ts"))).toBe(false);
+  });
+
+  it("init rerun skips existing files instead of clobbering them", () => {
+    writeNextFixture(tempDir, "root");
+
+    const first = runCliInit(tempDir);
+    expect(first.status).toBe(0);
+    const sendPath = join(tempDir, "pages/api/auth/otp/send.ts");
+    const firstContent = readFileSync(sendPath, "utf8");
+
+    const second = runCliInit(tempDir);
+
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain("رد شد");
+    expect(readFileSync(sendPath, "utf8")).toBe(firstContent);
+  });
+
+  it("init on a next-app project still generates App Router files (no pages shadowing)", () => {
+    writeNextFixture(tempDir, "root", true);
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("next-app");
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([
+      "app/api/auth/otp/send/route.ts",
+      "app/api/auth/otp/verify/route.ts",
+      "lib/otpy.ts",
+    ]);
+    expect(existsSync(join(tempDir, "pages/api/auth/otp/send.ts"))).toBe(false);
   });
 });

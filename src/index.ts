@@ -3,12 +3,13 @@ import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import packageMetadata from "../package.json" with { type: "json" };
-import { detectProject } from "./detector.js";
+import { detectNextPagesRoot, detectProject } from "./detector.js";
 import { appendOrUpdateEnvKey, getExistingEnvKey } from "./env.js";
 import {
   generateExpressTemplates,
   generateGoTemplates,
   generateNextAppTemplates,
+  generateNextPagesTemplates,
   generatePythonFastApiTemplates,
   generateSvelteKitTemplates,
 } from "./templates.js";
@@ -71,6 +72,11 @@ async function runInit() {
   let filesToGenerate = [];
   if (info.framework === "next-app") {
     filesToGenerate = generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
+  } else if (info.framework === "next-pages") {
+    filesToGenerate = generateNextPagesTemplates(
+      detectNextPagesRoot(cwd) === "src/pages",
+      info.isTypeScript,
+    );
   } else if (info.framework === "sveltekit") {
     filesToGenerate = generateSvelteKitTemplates();
   } else if (info.framework === "express" || info.framework === "node-generic") {

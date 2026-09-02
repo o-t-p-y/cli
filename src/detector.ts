@@ -23,6 +23,15 @@ export interface ProjectInfo {
   envFilePath: string;
 }
 
+export type NextPagesRoot = "pages" | "src/pages";
+
+// Next.js ignores src/pages when a root pages dir exists — root wins.
+export function detectNextPagesRoot(cwd: string = process.cwd()): NextPagesRoot {
+  if (existsSync(join(cwd, "pages"))) return "pages";
+  if (existsSync(join(cwd, "src", "pages"))) return "src/pages";
+  return "pages";
+}
+
 export function detectProject(cwd: string = process.cwd()): ProjectInfo {
   const hasPkgJson = existsSync(join(cwd, "package.json"));
   const hasTsConfig = existsSync(join(cwd, "tsconfig.json"));
