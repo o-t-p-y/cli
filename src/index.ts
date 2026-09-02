@@ -10,6 +10,7 @@ import {
   generateGoTemplates,
   generateNextAppTemplates,
   generatePythonFastApiTemplates,
+  generateSvelteKitTemplates,
 } from "./templates.js";
 
 const args = process.argv.slice(2);
@@ -70,6 +71,8 @@ async function runInit() {
   let filesToGenerate = [];
   if (info.framework === "next-app") {
     filesToGenerate = generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
+  } else if (info.framework === "sveltekit") {
+    filesToGenerate = generateSvelteKitTemplates();
   } else if (info.framework === "express" || info.framework === "node-generic") {
     filesToGenerate = generateExpressTemplates(info.hasSrcDir, info.isTypeScript);
   } else if (info.framework === "python-fastapi" || info.framework === "python-django") {

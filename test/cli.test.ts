@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import {
   generateGoTemplates,
   generateNextAppTemplates,
   generatePythonFastApiTemplates,
+  generateSvelteKitTemplates,
 } from "../src/templates.js";
 
 const requireFromTest = createRequire(import.meta.url);
@@ -117,5 +118,119 @@ describe("otpy cli detector & env", () => {
 
     const goFiles = generateGoTemplates();
     expect(goFiles.some((f) => f.path.includes("pkg/otpy/client.go"))).toBe(true);
+  });
+});
+
+describe("otpy cli sveltekit template", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-sveltekit-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function writeSvelteKitFixture(dir: string): void {
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: "sveltekit-fixture",
+        private: true,
+        devDependencies: { "@sveltejs/kit": "^2.5.0", svelte: "^5.0.0" },
+      }),
+    );
+    writeFileSync(join(dir, "tsconfig.json"), "{}");
+    writeFileSync(join(dir, ".env"), "PORT=5173\n");
+    mkdirSync(join(dir, "src", "routes"), { recursive: true });
+  }
+
+  function listFiles(root: string): string[] {
+    return readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((entry) => statSync(join(root, entry)).isFile())
+      .sort();
+  }
+
+  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    return spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
+      { cwd: dir, encoding: "utf8" },
+    );
+  }
+
+  it("detects a SvelteKit project and keeps the existing .env as the env file", () => {
+    writeSvelteKitFixture(tempDir);
+
+    const info = detectProject(tempDir);
+
+    expect(info.framework).toBe("sveltekit");
+    expect(info.isTypeScript).toBe(true);
+    expect(info.envFilePath).toBe(join(tempDir, ".env"));
+  });
+
+  it("generates exactly the three SvelteKit files with $lib imports and no relative or @/ imports", () => {
+    const files = generateSvelteKitTemplates();
+
+    expect(files.map((f) => f.path)).toEqual([
+      "src/lib/otpy.ts",
+      "src/routes/auth/otp/send/+server.ts",
+      "src/routes/auth/otp/verify/+server.ts",
+    ]);
+
+    const libFile = files.find((f) => f.path === "src/lib/otpy.ts")!;
+    expect(libFile.content).toContain('from "otpy"');
+    expect(libFile.content).toContain('from "$env/dynamic/private"');
+
+    for (const file of files) {
+      expect(file.content).not.toMatch(/from\s+"\.\.?\//); // no relative imports
+      expect(file.content).not.toContain("@/"); // no Next-style alias
+    }
+
+    for (const routeFile of files.filter((f) => f.path.endsWith("+server.ts"))) {
+      expect(routeFile.content).toContain('from "$lib/otpy"');
+      expect(routeFile.content).toContain('from "@sveltejs/kit"');
+      expect(routeFile.content).toContain("export const POST");
+    }
+  });
+
+  it("init on a SvelteKit project creates only the three target files (no Next fall-through)", () => {
+    writeSvelteKitFixture(tempDir);
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("sveltekit");
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([
+      "src/lib/otpy.ts",
+      "src/routes/auth/otp/send/+server.ts",
+      "src/routes/auth/otp/verify/+server.ts",
+    ]);
+
+    // Then: no Next.js App Router artifacts appear and the existing .env keys survive
+    expect(existsSync(join(tempDir, "src/app/api/auth/otp/send/route.ts"))).toBe(false);
+    expect(existsSync(join(tempDir, "src/app/api/auth/otp/verify/route.ts"))).toBe(false);
+
+    const env = readFileSync(join(tempDir, ".env"), "utf8");
+    expect(env).toContain("PORT=5173");
+    expect(env).toContain("OTPY_API_KEY=otpy_test_key_123");
+  });
+
+  it("init skips an existing src/lib/otpy.ts instead of clobbering it", () => {
+    writeSvelteKitFixture(tempDir);
+    const marker = "// custom client setup";
+    mkdirSync(join(tempDir, "src/lib"), { recursive: true });
+    writeFileSync(join(tempDir, "src/lib/otpy.ts"), marker);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(tempDir, "src/lib/otpy.ts"), "utf8")).toBe(marker);
+    expect(result.stdout).toContain("رد شد");
   });
 });

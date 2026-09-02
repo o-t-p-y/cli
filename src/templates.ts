@@ -122,6 +122,71 @@ export async function POST(request) {
   ];
 }
 
+export function generateSvelteKitTemplates(): GeneratedFile[] {
+  const clientCode = `import { OtpyClient } from "otpy";
+import { env } from "$env/dynamic/private";
+
+export const otpy = new OtpyClient({
+  apiKey: env.OTPY_API_KEY ?? "",
+});
+`;
+
+  const sendRouteCode = `import { json, type RequestHandler } from "@sveltejs/kit";
+import { OtpyError } from "otpy";
+import { otpy } from "$lib/otpy";
+
+export const POST: RequestHandler = async ({ request }) => {
+  try {
+    const { phone } = (await request.json()) as { phone?: string };
+    if (!phone) {
+      return json({ error: "شماره موبایل الزامی است" }, { status: 400 });
+    }
+
+    const result = await otpy.sendOtp(phone);
+    return json(result);
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return json({ error: error.code }, { status: error.status || 500 });
+    }
+    return json({ error: "خطا در ارسال پیامک" }, { status: 500 });
+  }
+};
+`;
+
+  const verifyRouteCode = `import { json, type RequestHandler } from "@sveltejs/kit";
+import { OtpyError } from "otpy";
+import { otpy } from "$lib/otpy";
+
+export const POST: RequestHandler = async ({ request }) => {
+  try {
+    const { phone, code } = (await request.json()) as { phone?: string; code?: string };
+    if (!phone || !code) {
+      return json({ error: "شماره موبایل و کد ورود الزامی است" }, { status: 400 });
+    }
+
+    const result = await otpy.verifyOtp(phone, code);
+    if (!result.verified) {
+      return json({ verified: false, error: "کد وارد شده اشتباه یا منقضی است" }, { status: 401 });
+    }
+
+    // TODO: احراز هویت موفق بود. اینجا سشن یا توکن لاگین کاربر را صادر کنید.
+    return json({ verified: true });
+  } catch (error) {
+    if (error instanceof OtpyError) {
+      return json({ error: error.code }, { status: error.status || 500 });
+    }
+    return json({ error: "خطا در بررسی کد" }, { status: 500 });
+  }
+};
+`;
+
+  return [
+    { path: "src/lib/otpy.ts", content: clientCode },
+    { path: "src/routes/auth/otp/send/+server.ts", content: sendRouteCode },
+    { path: "src/routes/auth/otp/verify/+server.ts", content: verifyRouteCode },
+  ];
+}
+
 export function generateExpressTemplates(hasSrc: boolean, isTs: boolean): GeneratedFile[] {
   const prefix = hasSrc ? "src/" : "";
   const ext = isTs ? "ts" : "js";
