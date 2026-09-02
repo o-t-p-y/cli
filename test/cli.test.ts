@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
   generateGoTemplates,
   generateNextAppTemplates,
   generateNextPagesTemplates,
+  generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
   generateSvelteKitTemplates,
 } from "../src/templates.js";
@@ -460,5 +461,178 @@ describe("otpy cli next-pages template", () => {
       "lib/otpy.ts",
     ]);
     expect(existsSync(join(tempDir, "pages/api/auth/otp/send.ts"))).toBe(false);
+  });
+});
+
+describe("otpy cli php-laravel template", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-php-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const phpAvailable = spawnSync("php", ["-v"], { encoding: "utf8" }).status === 0;
+
+  function writeComposerFixture(dir: string, withArtisan: boolean): void {
+    writeFileSync(
+      join(dir, "composer.json"),
+      JSON.stringify({
+        name: "fixture/app",
+        require: { php: "^8.2", "laravel/framework": "^11.0" },
+      }),
+    );
+    if (withArtisan) {
+      writeFileSync(join(dir, "artisan"), "#!/usr/bin/env php\n<?php\n");
+    }
+    writeFileSync(join(dir, ".env"), "APP_ENV=local\n");
+  }
+
+  function listFiles(root: string): string[] {
+    return readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((entry) => statSync(join(root, entry)).isFile())
+      .sort();
+  }
+
+  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    return spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
+      { cwd: dir, encoding: "utf8" },
+    );
+  }
+
+  it("detects php-laravel only when composer.json is paired with artisan", () => {
+    // Given: a composer.json project with the artisan marker
+    writeComposerFixture(tempDir, true);
+    expect(detectProject(tempDir).framework).toBe("php-laravel");
+
+    // And: without artisan the same project is plain PHP
+    rmSync(join(tempDir, "artisan"));
+    expect(detectProject(tempDir).framework).toBe("php-generic");
+  });
+
+  it("generates the Laravel controller, routes, and config with the HTTP client and no JavaScript", () => {
+    const files = generatePhpLaravelTemplates();
+
+    expect(files.map((f) => f.path)).toEqual([
+      "config/otpy.php",
+      "app/Http/Controllers/OtpController.php",
+      "routes/api.php",
+    ]);
+
+    const controller = files.find((f) => f.path === "app/Http/Controllers/OtpController.php")!;
+    expect(controller.content).toContain("namespace App\\Http\\Controllers;");
+    expect(controller.content).toContain("use Illuminate\\Support\\Facades\\Http;");
+    expect(controller.content).toContain("Http::withToken(config('otpy.key'))");
+    expect(controller.content).toContain("class OtpController extends Controller");
+    expect(controller.content).toContain("'/v1/otp/send'");
+    expect(controller.content).toContain("'/v1/otp/verify'");
+
+    const config = files.find((f) => f.path === "config/otpy.php")!;
+    expect(config.content).toContain("env('OTPY_API_KEY'");
+
+    const routes = files.find((f) => f.path === "routes/api.php")!;
+    expect(routes.content).toContain("Route::post('/auth/otp/send', [OtpController::class, 'send'])");
+    expect(routes.content).toContain("Route::post('/auth/otp/verify', [OtpController::class, 'verify'])");
+
+    for (const file of files) {
+      // Then: never JavaScript for a PHP project
+      expect(file.content).not.toMatch(/process\.env|module\.exports|export default|require\(/);
+      expect(file.content).not.toContain("npm install");
+      // And: never a hardcoded secret
+      expect(file.content).not.toContain("otpy_test");
+    }
+  });
+
+  it.runIf(phpAvailable)("generated php files pass php -l lint", () => {
+    const files = generatePhpLaravelTemplates();
+
+    for (const file of files) {
+      const target = join(tempDir, file.path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content);
+
+      const lint = spawnSync("php", ["-l", target], { encoding: "utf8" });
+      expect(lint.status, `${file.path}: ${lint.stdout}${lint.stderr}`).toBe(0);
+    }
+  });
+
+  it("init on a Laravel fixture creates only php files (no Next fall-through)", () => {
+    writeComposerFixture(tempDir, true);
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("php-laravel");
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([
+      "app/Http/Controllers/OtpController.php",
+      "config/otpy.php",
+      "routes/api.php",
+    ]);
+
+    // Then: no Next.js/JS artifacts appear and the existing .env keys survive
+    expect(existsSync(join(tempDir, "lib/otpy.js"))).toBe(false);
+    expect(existsSync(join(tempDir, "app/api/auth/otp/send/route.js"))).toBe(false);
+    expect(result.stdout).not.toContain("npm install");
+
+    const env = readFileSync(join(tempDir, ".env"), "utf8");
+    expect(env).toContain("APP_ENV=local");
+    expect(env).toContain("OTPY_API_KEY=otpy_test_key_123");
+  });
+
+  it("init prints the routes snippet when routes/api.php already exists instead of clobbering it", () => {
+    writeComposerFixture(tempDir, true);
+    mkdirSync(join(tempDir, "routes"));
+    const marker = "<?php\n// custom routes\n";
+    writeFileSync(join(tempDir, "routes/api.php"), marker);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(tempDir, "routes/api.php"), "utf8")).toBe(marker);
+    expect(result.stdout).toContain("Route::post('/auth/otp/send'");
+    expect(result.stdout).toContain("Route::post('/auth/otp/verify'");
+  });
+
+  it("init rerun skips existing php files instead of clobbering them", () => {
+    writeComposerFixture(tempDir, true);
+
+    const first = runCliInit(tempDir);
+    expect(first.status).toBe(0);
+    const controllerPath = join(tempDir, "app/Http/Controllers/OtpController.php");
+    const firstContent = readFileSync(controllerPath, "utf8");
+
+    const second = runCliInit(tempDir);
+
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain("رد شد");
+    expect(readFileSync(controllerPath, "utf8")).toBe(firstContent);
+  });
+
+  it("php-generic project gets the manual guide message and no generated files", () => {
+    writeComposerFixture(tempDir, false);
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("php-generic");
+    expect(result.stdout).toContain("https://otpy.ir/docs");
+
+    const created = listFiles(tempDir).filter((f) => !before.includes(f));
+    expect(created).toEqual([]);
+
+    // Then: no Next.js/JS artifacts and no npm guidance for a plain PHP project
+    expect(existsSync(join(tempDir, "lib/otpy.js"))).toBe(false);
+    expect(existsSync(join(tempDir, "app/Http/Controllers/OtpController.php"))).toBe(false);
+    expect(result.stdout).not.toContain("npm install");
   });
 });

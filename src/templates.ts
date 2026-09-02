@@ -416,6 +416,92 @@ def verify_otp(req: VerifyOtpRequest):
   return [{ path: "routers/otp.py", content: code }];
 }
 
+export const phpLaravelRoutesSnippet = `Route::post('/auth/otp/send', [OtpController::class, 'send']);
+Route::post('/auth/otp/verify', [OtpController::class, 'verify']);
+`;
+
+export function generatePhpLaravelTemplates(): GeneratedFile[] {
+  const configCode = `<?php
+
+return [
+    'key' => env('OTPY_API_KEY', ''),
+    'base_url' => env('OTPY_BASE_URL', 'https://api.otpy.ir'),
+];
+`;
+
+  const controllerCode = `<?php
+
+namespace App\\Http\\Controllers;
+
+use Illuminate\\Http\\JsonResponse;
+use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\Http;
+
+class OtpController extends Controller
+{
+    public function send(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+        ]);
+
+        $response = Http::withToken(config('otpy.key'))
+            ->acceptJson()
+            ->post(config('otpy.base_url').'/v1/otp/send', [
+                'phone' => $validated['phone'],
+            ]);
+
+        if ($response->failed()) {
+            return response()->json(
+                ['error' => $response->json('error', 'خطا در ارسال پیامک')],
+                $response->status()
+            );
+        }
+
+        return response()->json($response->json());
+    }
+
+    public function verify(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'code' => 'required|string',
+        ]);
+
+        $response = Http::withToken(config('otpy.key'))
+            ->acceptJson()
+            ->post(config('otpy.base_url').'/v1/otp/verify', [
+                'phone' => $validated['phone'],
+                'code' => $validated['code'],
+            ]);
+
+        if ($response->failed()) {
+            return response()->json(
+                ['error' => $response->json('error', 'خطا در بررسی کد')],
+                $response->status()
+            );
+        }
+
+        // TODO: احراز هویت موفق بود. اینجا سشن یا توکن لاگین کاربر را صادر کنید.
+        return response()->json(['verified' => (bool) $response->json('verified', false)]);
+    }
+}
+`;
+
+  const routesCode = `<?php
+
+use App\\Http\\Controllers\\OtpController;
+use Illuminate\\Support\\Facades\\Route;
+
+${phpLaravelRoutesSnippet}`;
+
+  return [
+    { path: "config/otpy.php", content: configCode },
+    { path: "app/Http/Controllers/OtpController.php", content: controllerCode },
+    { path: "routes/api.php", content: routesCode },
+  ];
+}
+
 export function generateGoTemplates(): GeneratedFile[] {
   const code = `package otpy
 

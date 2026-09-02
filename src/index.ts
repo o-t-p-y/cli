@@ -10,8 +10,11 @@ import {
   generateGoTemplates,
   generateNextAppTemplates,
   generateNextPagesTemplates,
+  generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
   generateSvelteKitTemplates,
+  phpLaravelRoutesSnippet,
+  type GeneratedFile,
 } from "./templates.js";
 
 const args = process.argv.slice(2);
@@ -69,7 +72,7 @@ async function runInit() {
   }
 
   // Generate templates
-  let filesToGenerate = [];
+  let filesToGenerate: GeneratedFile[] = [];
   if (info.framework === "next-app") {
     filesToGenerate = generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
   } else if (info.framework === "next-pages") {
@@ -85,33 +88,70 @@ async function runInit() {
     filesToGenerate = generatePythonFastApiTemplates();
   } else if (info.framework === "go") {
     filesToGenerate = generateGoTemplates();
+  } else if (info.framework === "php-laravel") {
+    filesToGenerate = generatePhpLaravelTemplates();
+    if (existsSync(join(cwd, "routes/api.php"))) {
+      console.log(`\n📝 فایل routes/api.php از قبل موجود است؛ این خطوط را به آن اضافه کنید:`);
+      console.log(phpLaravelRoutesSnippet);
+    }
+  } else if (info.framework === "php-generic") {
+    filesToGenerate = [];
+    console.log(`\n🐘 پروژه PHP شناسایی شد، اما فریم‌ورک پشتیبانی‌شده‌ای (Laravel) پیدا نشد.`);
+    console.log(`   برای ادغام دستی، مستندات را ببینید: https://otpy.ir/docs`);
+    console.log(`   نمونه ارسال با cURL:`);
+    console.log(`   curl -X POST https://api.otpy.ir/v1/otp/send \\`);
+    console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
+    console.log(`     -d '{"phone":"09123456789"}'`);
   } else {
     filesToGenerate = generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
   }
 
-  console.log(`\n📦 در حال ایجاد فایل‌های ادغام و کلاینت:`);
-  for (const file of filesToGenerate) {
-    const fullPath = join(cwd, file.path);
-    const parentDir = dirname(fullPath);
-    if (!existsSync(parentDir)) {
-      mkdirSync(parentDir, { recursive: true });
-    }
-    if (!existsSync(fullPath)) {
-      writeFileSync(fullPath, file.content, "utf8");
-      console.log(`   + ایجاد فایل: ${file.path}`);
-    } else {
-      console.log(`   ~ فایل موجود بود (رد شد): ${file.path}`);
+  if (filesToGenerate.length > 0) {
+    console.log(`\n📦 در حال ایجاد فایل‌های ادغام و کلاینت:`);
+    for (const file of filesToGenerate) {
+      const fullPath = join(cwd, file.path);
+      const parentDir = dirname(fullPath);
+      if (!existsSync(parentDir)) {
+        mkdirSync(parentDir, { recursive: true });
+      }
+      if (!existsSync(fullPath)) {
+        writeFileSync(fullPath, file.content, "utf8");
+        console.log(`   + ایجاد فایل: ${file.path}`);
+      } else {
+        console.log(`   ~ فایل موجود بود (رد شد): ${file.path}`);
+      }
     }
   }
 
   if (args.includes("--ai")) {
     console.log(`\n🤖 دستورالعمل هوش مصنوعی برای ابزارهای Cursor / Windsurf / Claude Code:`);
-    console.log(`   - کتابخانه: otpy`);
-    console.log(`   - ارسال: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
-    console.log(`   - تایید: otpy.verifyOtp(phone, code) -> { verified: true }`);
+    if (info.framework === "php-laravel" || info.framework === "php-generic") {
+      console.log(`   - REST API: https://api.otpy.ir`);
+      console.log(`   - ارسال: POST /v1/otp/send با بدنه {"phone": "09123456789"}`);
+      console.log(`   - تایید: POST /v1/otp/verify با بدنه {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
+    } else {
+      console.log(`   - کتابخانه: otpy`);
+      console.log(`   - ارسال: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
+      console.log(`   - تایید: otpy.verifyOtp(phone, code) -> { verified: true }`);
+    }
   }
 
-  console.log(`
+  if (info.framework === "php-generic") {
+    console.log(`
+برای راهنمای کامل ادغام دستی به https://otpy.ir/docs مراجعه کنید.
+داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
+`);
+  } else if (info.framework === "php-laravel") {
+    console.log(`
+🎉 تبریک! ادغام با موفقیت انجام شد.
+
+مراحل بعدی:
+  ۱. اجرای سرور محلی: php artisan serve
+  ۲. تست ارسال: curl -X POST http://localhost:8000/api/auth/otp/send -H "Content-Type: application/json" -d '{"phone":"09123456789"}'
+  ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
+`);
+  } else {
+    console.log(`
 🎉 تبریک! ادغام با موفقیت انجام شد.
 
 مراحل بعدی:
@@ -119,6 +159,7 @@ async function runInit() {
   ۲. برای تست ارسال پیامک: npx otpy test 09123456789
   ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
 `);
+  }
 }
 
 async function runTest() {
