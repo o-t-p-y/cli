@@ -170,7 +170,9 @@ export default router;
 }
 
 export function generatePythonFastApiTemplates(): GeneratedFile[] {
-  const code = `import os
+  const code = `print("Install dependencies: pip install requests fastapi")
+
+import os
 import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel

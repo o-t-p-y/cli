@@ -1,6 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { detectProject } from "../src/detector.js";
 import { appendOrUpdateEnvKey, getExistingEnvKey } from "../src/env.js";
@@ -10,6 +13,8 @@ import {
   generateNextAppTemplates,
   generatePythonFastApiTemplates,
 } from "../src/templates.js";
+
+const requireFromTest = createRequire(import.meta.url);
 
 describe("otpy cli detector & env", () => {
   let tempDir: string;
@@ -32,6 +37,22 @@ describe("otpy cli detector & env", () => {
     const info = detectProject(tempDir);
     expect(info.framework).toBe("next-pages");
     expect(info.isTypeScript).toBe(true);
+  });
+
+  it("selects an existing .env for a Next project when .env.local is absent", () => {
+    // Given: a Next project with only an existing .env file
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({ dependencies: { next: "15.0.0", react: "19.0.0" } }),
+    );
+    const envPath = join(tempDir, ".env");
+    writeFileSync(envPath, "PORT=3000\n");
+
+    // When: the CLI detects the project
+    const info = detectProject(tempDir);
+
+    // Then: it preserves the existing environment file choice
+    expect(info.envFilePath).toBe(envPath);
   });
 
   it("detects Python FastAPI and Go projects", () => {
@@ -62,6 +83,26 @@ describe("otpy cli detector & env", () => {
     expect(getExistingEnvKey(envPath)).toBe("otpy_new_456");
   });
 
+  it("does not persist a placeholder key when init receives empty input", () => {
+    // Given: a project with an existing env file and no API key
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "fixture" }));
+    const envPath = join(tempDir, ".env");
+    writeFileSync(envPath, "PORT=3000\n");
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+
+    // When: init receives an empty API key response
+    const result = spawnSync(process.execPath, ["--import", requireFromTest.resolve("tsx"), cliPath], {
+      cwd: tempDir,
+      encoding: "utf8",
+      input: "\n",
+    });
+
+    // Then: the existing file has no placeholder and the dashboard hint is shown
+    expect(result.status).toBe(0);
+    expect(readFileSync(envPath, "utf8")).not.toContain("otpy_test_key_replace_with_yours");
+    expect(result.stdout).toContain("https://dash.otpy.ir");
+  });
+
   it("generates templates for all supported stacks", () => {
     const nextFiles = generateNextAppTemplates(false, true);
     expect(nextFiles.some((f) => f.path.includes("lib/otpy.ts"))).toBe(true);
@@ -72,6 +113,7 @@ describe("otpy cli detector & env", () => {
 
     const pythonFiles = generatePythonFastApiTemplates();
     expect(pythonFiles.some((f) => f.path.includes("routers/otp.py"))).toBe(true);
+    expect(pythonFiles.map((file) => file.content).join("\n")).toContain("pip install requests fastapi");
 
     const goFiles = generateGoTemplates();
     expect(goFiles.some((f) => f.path.includes("pkg/otpy/client.go"))).toBe(true);

@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import packageMetadata from "../package.json" with { type: "json" };
 import { detectProject } from "./detector.js";
 import { appendOrUpdateEnvKey, getExistingEnvKey } from "./env.js";
 import {
@@ -13,6 +14,7 @@ import {
 
 const args = process.argv.slice(2);
 const command = args[0] || "init";
+const placeholderApiKey = "otpy_test_key_replace_with_yours";
 
 function printBanner() {
   console.log(`
@@ -54,13 +56,15 @@ async function runInit() {
 
   if (!apiKey) {
     console.log(`💡 کلید API پروژه خود را وارد کنید (یا از داشبورد https://dash.otpy.ir کپی کنید):`);
-    const inputKey = await prompt("🔑 کلید API (Enter برای ثبت کلید آزمایشی): ");
-    apiKey = inputKey || "otpy_test_key_replace_with_yours";
+    apiKey = (await prompt("🔑 کلید API: ")) || null;
   }
 
-  // Write to .env
-  appendOrUpdateEnvKey(info.envFilePath, "OTPY_API_KEY", apiKey);
-  console.log(`\n✔ کلید در فایل ${info.envFilePath} ذخیره شد.`);
+  if (apiKey && apiKey !== placeholderApiKey) {
+    appendOrUpdateEnvKey(info.envFilePath, "OTPY_API_KEY", apiKey);
+    console.log(`\n✔ کلید در فایل ${info.envFilePath} ذخیره شد.`);
+  } else {
+    console.log(`\n💡 برای دریافت کلید API به https://dash.otpy.ir مراجعه کنید.`);
+  }
 
   // Generate templates
   let filesToGenerate = [];
@@ -179,7 +183,7 @@ async function runUsage() {
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("otpy-cli 0.1.0");
+  console.log(packageMetadata.version);
   process.exit(0);
 }
 

@@ -48,7 +48,7 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo {
           isTypeScript: hasTsConfig,
           hasSrcDir,
           hasEnvFile,
-          envFilePath: envLocal ? join(cwd, ".env.local") : join(cwd, ".env.local"),
+          envFilePath,
         };
       }
 
