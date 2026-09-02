@@ -2,6 +2,21 @@
   "name": "otpy",
   "version": "0.3.2",
   "description": "OTPy.ir TypeScript SDK — send and verify login OTPs in seconds.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/o-t-p-y/cli.git",
+    "directory": "packages/sdk-ts"
+  },
+  "homepage": "https://otpy.ir",
+  "bugs": "https://github.com/o-t-p-y/cli/issues",
+  "keywords": [
+    "otp",
+    "otpy",
+    "sms",
+    "iranian-otp",
+    "typescript",
+    "iran"
+  ],
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -19,6 +34,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
