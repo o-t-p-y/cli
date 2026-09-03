@@ -1,0 +1,80 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "otpy@*"
+      - "otpy-cli@*"
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance (sigstore) — REQUIRED, do not remove
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install
+
+      - name: Resolve package from tag
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            otpy-cli@*)
+              DIR="packages/cli"
+              VERSION="${TAG#otpy-cli@}"
+              ;;
+            otpy@*)
+              DIR="packages/otpy"
+              VERSION="${TAG#otpy@}"
+              ;;
+            *)
+              echo "Unexpected tag $TAG"
+              exit 1
+              ;;
+          esac
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Verify tag matches package name and version
+        run: |
+          DIR="${{ steps.pkg.outputs.dir }}"
+          PKG_NAME="$(node -p "require('./$DIR/package.json').name")"
+          PKG_VERSION="$(node -p "require('./$DIR/package.json').version")"
+          EXPECTED_NAME="${GITHUB_REF_NAME%@*}"
+          if [ "$PKG_NAME" != "$EXPECTED_NAME" ]; then
+            echo "Package name $PKG_NAME does not match tag prefix $EXPECTED_NAME"
+            exit 1
+          fi
+          if [ "$PKG_VERSION" != "${{ steps.pkg.outputs.version }}" ]; then
+            echo "Tag version ${{ steps.pkg.outputs.version }} != package.json $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

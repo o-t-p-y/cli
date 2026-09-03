@@ -3,11 +3,12 @@
   "version": "0.3.2",
   "private": false,
   "type": "module",
-  "description": "npx otpy init — one-command OTPy integration (framework detection, code patching, AI mode). Published as `otpy` in P4.",
+  "description": "npx otpy-cli init — one-command OTPy integration (framework detection, code patching, AI mode).",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/o-t-p-y/cli.git",
-    "directory": "cli/otpy"
+    "directory": "packages/cli"
   },
   "homepage": "https://otpy.ir",
   "bugs": "https://github.com/o-t-p-y/cli/issues",
@@ -20,8 +21,11 @@
     "authentication"
   ],
   "bin": {
-    "otpy": "./dist/index.js"
+    "otpy-cli": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
