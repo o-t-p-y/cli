@@ -1,4 +1,4 @@
-# otpy-cli
+# @o-t-p-y/cli
 
 The official CLI and automatic integration wizard for [OTPy.ir](https://otpy.ir).
 

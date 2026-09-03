@@ -1,4 +1,4 @@
-# otpy
+# @o-t-p-y/sdk
 
 Official zero-dependency TypeScript/JavaScript SDK for [OTPy.ir](https://otpy.ir) — send and verify login OTPs in seconds.
 
@@ -14,9 +14,9 @@ Official zero-dependency TypeScript/JavaScript SDK for [OTPy.ir](https://otpy.ir
 ```bash
 npm install @o-t-p-y/sdk
 # or
-pnpm add otpy
+pnpm add @o-t-p-y/sdk
 # or
-yarn add otpy
+yarn add @o-t-p-y/sdk
 ```
 
 ## Quick Start
