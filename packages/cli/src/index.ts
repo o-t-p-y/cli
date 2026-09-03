@@ -156,7 +156,7 @@ async function runInit() {
 
 مراحل بعدی:
   ۱. برای نصب پکیج: npm install @o-t-p-y/sdk
-  ۲. برای تست ارسال پیامک: npx otpy test 09123456789
+  ۲. برای تست ارسال پیامک: npx otpy-cli test 09123456789
   ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
 `);
   }
@@ -165,14 +165,14 @@ async function runInit() {
 async function runTest() {
   const phone = args[1];
   if (!phone || !/^09\d{9}$/.test(phone)) {
-    console.log("❌ خطا: شماره موبایل معتبر الزامی است. مثال: npx otpy test 09123456789");
+    console.log("❌ خطا: شماره موبایل معتبر الزامی است. مثال: npx otpy-cli test 09123456789");
     process.exit(1);
   }
 
   const info = detectProject(process.cwd());
   const apiKey = getExistingEnvKey(info.envFilePath);
   if (!apiKey) {
-    console.log("❌ کلید OTPY_API_KEY در فایل .env یافت نشد. ابتدا npx otpy init را اجرا کنید.");
+    console.log("❌ کلید OTPY_API_KEY در فایل .env یافت نشد. ابتدا npx otpy-cli init را اجرا کنید.");
     process.exit(1);
   }
 
@@ -240,11 +240,11 @@ if (command === "--version" || command === "-v") {
 if (command === "--help" || command === "-h") {
   console.log(`
 استفاده از دستورات ابزار خط فرمان OTPy:
-  npx otpy init         راه‌اندازی خودکار پروژه و تولید فایل‌های آماده
-  npx otpy init --ai    راه‌اندازی به همراه راهنمای ایجنت‌های هوش مصنوعی
-  npx otpy test <phone> ارسال پیامک تست به شماره دلخواه
-  npx otpy usage        مشاهده آمار مصرف امروز سهمیه
-  npx otpy --version    نسخه CLI
+  npx otpy-cli init         راه‌اندازی خودکار پروژه و تولید فایل‌های آماده
+  npx otpy-cli init --ai    راه‌اندازی به همراه راهنمای ایجنت‌های هوش مصنوعی
+  npx otpy-cli test <phone> ارسال پیامک تست به شماره دلخواه
+  npx otpy-cli usage        مشاهده آمار مصرف امروز سهمیه
+  npx otpy-cli --version    نسخه CLI
 `);
   process.exit(0);
 }
@@ -256,6 +256,6 @@ if (command === "init") {
 } else if (command === "usage") {
   runUsage().catch(console.error);
 } else {
-  console.log(`دستور ناشناخته: ${command}\nبرای راهنما npx otpy --help را اجرا کنید.`);
+  console.log(`دستور ناشناخته: ${command}\nبرای راهنما npx otpy-cli --help را اجرا کنید.`);
   process.exit(1);
 }
