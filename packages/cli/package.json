@@ -1,0 +1,43 @@
+{
+  "name": "otpy-cli",
+  "version": "0.3.2",
+  "private": false,
+  "type": "module",
+  "description": "npx otpy init — one-command OTPy integration (framework detection, code patching, AI mode). Published as `otpy` in P4.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/o-t-p-y/cli.git",
+    "directory": "cli/otpy"
+  },
+  "homepage": "https://otpy.ir",
+  "bugs": "https://github.com/o-t-p-y/cli/issues",
+  "keywords": [
+    "otp",
+    "otpy",
+    "sms",
+    "iranian-otp",
+    "cli",
+    "authentication"
+  ],
+  "bin": {
+    "otpy": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}
