@@ -8,13 +8,13 @@ export function generateNextAppTemplates(hasSrc: boolean, isTs: boolean): Genera
   const ext = isTs ? "ts" : "js";
 
   const clientCode = isTs
-    ? `import { OtpyClient } from "otpy";
+    ? `import { OtpyClient } from "@o-t-p-y/sdk";
 
 export const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY!,
 });
 `
-    : `import { OtpyClient } from "otpy";
+    : `import { OtpyClient } from "@o-t-p-y/sdk";
 
 export const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY,
@@ -127,13 +127,13 @@ export function generateNextPagesTemplates(hasSrcPages: boolean, isTs: boolean):
   const ext = isTs ? "ts" : "js";
 
   const clientCode = isTs
-    ? `import { OtpyClient } from "otpy";
+    ? `import { OtpyClient } from "@o-t-p-y/sdk";
 
 export const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY!,
 });
 `
-    : `import { OtpyClient } from "otpy";
+    : `import { OtpyClient } from "@o-t-p-y/sdk";
 
 export const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY,
@@ -142,7 +142,7 @@ export const otpy = new OtpyClient({
 
   const sendHandlerCode = isTs
     ? `import type { NextApiRequest, NextApiResponse } from "next";
-import { OtpyError } from "otpy";
+import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "../../../../lib/otpy";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -167,7 +167,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 }
 `
-    : `import { OtpyError } from "otpy";
+    : `import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "../../../../lib/otpy";
 
 export default async function handler(req, res) {
@@ -195,7 +195,7 @@ export default async function handler(req, res) {
 
   const verifyHandlerCode = isTs
     ? `import type { NextApiRequest, NextApiResponse } from "next";
-import { OtpyError } from "otpy";
+import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "../../../../lib/otpy";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -225,7 +225,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 }
 `
-    : `import { OtpyError } from "otpy";
+    : `import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "../../../../lib/otpy";
 
 export default async function handler(req, res) {
@@ -264,7 +264,7 @@ export default async function handler(req, res) {
 }
 
 export function generateSvelteKitTemplates(): GeneratedFile[] {
-  const clientCode = `import { OtpyClient } from "otpy";
+  const clientCode = `import { OtpyClient } from "@o-t-p-y/sdk";
 import { env } from "$env/dynamic/private";
 
 export const otpy = new OtpyClient({
@@ -273,7 +273,7 @@ export const otpy = new OtpyClient({
 `;
 
   const sendRouteCode = `import { json, type RequestHandler } from "@sveltejs/kit";
-import { OtpyError } from "otpy";
+import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "$lib/otpy";
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -295,7 +295,7 @@ export const POST: RequestHandler = async ({ request }) => {
 `;
 
   const verifyRouteCode = `import { json, type RequestHandler } from "@sveltejs/kit";
-import { OtpyError } from "otpy";
+import { OtpyError } from "@o-t-p-y/sdk";
 import { otpy } from "$lib/otpy";
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -332,7 +332,7 @@ export function generateExpressTemplates(hasSrc: boolean, isTs: boolean): Genera
   const prefix = hasSrc ? "src/" : "";
   const ext = isTs ? "ts" : "js";
 
-  const clientCode = `import { OtpyClient } from "otpy";
+  const clientCode = `import { OtpyClient } from "@o-t-p-y/sdk";
 
 export const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY || "",

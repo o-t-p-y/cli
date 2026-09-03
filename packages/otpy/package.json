@@ -1,5 +1,5 @@
 {
-  "name": "otpy",
+  "name": "@o-t-p-y/sdk",
   "version": "0.3.2",
   "description": "OTPy.ir TypeScript SDK — send and verify login OTPs in seconds.",
   "repository": {

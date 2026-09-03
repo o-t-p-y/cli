@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - "otpy@*"
+      - "sdk@*"
       - "otpy-cli@*"
 
 concurrency:
@@ -38,9 +38,9 @@ jobs:
               DIR="packages/cli"
               VERSION="${TAG#otpy-cli@}"
               ;;
-            otpy@*)
+            sdk@*)
               DIR="packages/otpy"
-              VERSION="${TAG#otpy@}"
+              VERSION="${TAG#sdk@}"
               ;;
             *)
               echo "Unexpected tag $TAG"
@@ -61,9 +61,16 @@ jobs:
           DIR="${{ steps.pkg.outputs.dir }}"
           PKG_NAME="$(node -p "require('./$DIR/package.json').name")"
           PKG_VERSION="$(node -p "require('./$DIR/package.json').version")"
-          EXPECTED_NAME="${GITHUB_REF_NAME%@*}"
-          if [ "$PKG_NAME" != "$EXPECTED_NAME" ]; then
-            echo "Package name $PKG_NAME does not match tag prefix $EXPECTED_NAME"
+          # Scoped packages: tag prefix is the short name (sdk, otpy-cli)
+          # Unscoped packages: tag prefix is the full name
+          EXPECTED_SHORT="${GITHUB_REF_NAME%@*}"
+          EXPECTED_FULL=""
+          case "$EXPECTED_SHORT" in
+            sdk) EXPECTED_FULL="@o-t-p-y/sdk" ;;
+            *) EXPECTED_FULL="$EXPECTED_SHORT" ;;
+          esac
+          if [ "$PKG_NAME" != "$EXPECTED_FULL" ]; then
+            echo "Package name $PKG_NAME does not match expected $EXPECTED_FULL (tag prefix $EXPECTED_SHORT)"
             exit 1
           fi
           if [ "$PKG_VERSION" != "${{ steps.pkg.outputs.version }}" ]; then

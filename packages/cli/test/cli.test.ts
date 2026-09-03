@@ -183,7 +183,7 @@ describe("otpy cli sveltekit template", () => {
     ]);
 
     const libFile = files.find((f) => f.path === "src/lib/otpy.ts")!;
-    expect(libFile.content).toContain('from "otpy"');
+    expect(libFile.content).toContain('from "@o-t-p-y/sdk"');
     expect(libFile.content).toContain('from "$env/dynamic/private"');
 
     for (const file of files) {

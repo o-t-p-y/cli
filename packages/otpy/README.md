@@ -12,7 +12,7 @@ Official zero-dependency TypeScript/JavaScript SDK for [OTPy.ir](https://otpy.ir
 ## Installation
 
 ```bash
-npm install otpy
+npm install @o-t-p-y/sdk
 # or
 pnpm add otpy
 # or
@@ -24,7 +24,7 @@ yarn add otpy
 ### 1. Initialize the Client
 
 ```typescript
-import { OtpyClient } from "otpy";
+import { OtpyClient } from "@o-t-p-y/sdk";
 
 const otpy = new OtpyClient({
   apiKey: process.env.OTPY_API_KEY!,
@@ -61,7 +61,7 @@ console.log(`Paid sent today: ${usage.paid_today}`);
 ## Error Handling
 
 ```typescript
-import { OtpyClient, OtpyError } from "otpy";
+import { OtpyClient, OtpyError } from "@o-t-p-y/sdk";
 
 try {
   await otpy.sendOtp("09123456789");

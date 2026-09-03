@@ -130,7 +130,7 @@ async function runInit() {
       console.log(`   - ارسال: POST /v1/otp/send با بدنه {"phone": "09123456789"}`);
       console.log(`   - تایید: POST /v1/otp/verify با بدنه {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
     } else {
-      console.log(`   - کتابخانه: otpy`);
+      console.log(`   - کتابخانه: @o-t-p-y/sdk`);
       console.log(`   - ارسال: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
       console.log(`   - تایید: otpy.verifyOtp(phone, code) -> { verified: true }`);
     }
@@ -155,7 +155,7 @@ async function runInit() {
 🎉 تبریک! ادغام با موفقیت انجام شد.
 
 مراحل بعدی:
-  ۱. برای نصب پکیج: npm install otpy
+  ۱. برای نصب پکیج: npm install @o-t-p-y/sdk
   ۲. برای تست ارسال پیامک: npx otpy test 09123456789
   ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
 `);
