@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+          # no cache: pnpm — lockfile intentionally absent until task-16 hardening
 
       - run: pnpm install
 
