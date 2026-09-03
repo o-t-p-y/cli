@@ -1,5 +1,5 @@
 {
-  "name": "otpy-cli",
+  "name": "@o-t-p-y/cli",
   "version": "0.3.2",
   "private": false,
   "type": "module",

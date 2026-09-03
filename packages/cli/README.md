@@ -7,7 +7,7 @@ The official CLI and automatic integration wizard for [OTPy.ir](https://otpy.ir)
 Initialize OTP authentication in your existing project with one command:
 
 ```bash
-npx otpy-cli init
+npx @o-t-p-y/cli init
 ```
 
 The CLI will:
@@ -20,19 +20,19 @@ The CLI will:
 ### Send a Test OTP
 
 ```bash
-npx otpy-cli test 09123456789
+npx @o-t-p-y/cli test 09123456789
 ```
 
 ### View Daily Quota Usage
 
 ```bash
-npx otpy-cli usage
+npx @o-t-p-y/cli usage
 ```
 
 ### AI Integration Mode
 
 ```bash
-npx otpy-cli init --ai
+npx @o-t-p-y/cli init --ai
 ```
 
 Outputs prompt instructions for AI coding assistants (Cursor, Windsurf, Claude Code, GitHub Copilot).

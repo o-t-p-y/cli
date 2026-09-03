@@ -4,7 +4,7 @@ on:
   push:
     tags:
       - "sdk@*"
-      - "otpy-cli@*"
+      - "cli@*"
 
 concurrency:
   group: release
@@ -34,9 +34,9 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           case "$TAG" in
-            otpy-cli@*)
+            cli@*)
               DIR="packages/cli"
-              VERSION="${TAG#otpy-cli@}"
+              VERSION="${TAG#cli@}"
               ;;
             sdk@*)
               DIR="packages/otpy"
@@ -61,12 +61,13 @@ jobs:
           DIR="${{ steps.pkg.outputs.dir }}"
           PKG_NAME="$(node -p "require('./$DIR/package.json').name")"
           PKG_VERSION="$(node -p "require('./$DIR/package.json').version")"
-          # Scoped packages: tag prefix is the short name (sdk, otpy-cli)
+          # Scoped packages: tag prefix is the short name (sdk, cli@*)
           # Unscoped packages: tag prefix is the full name
           EXPECTED_SHORT="${GITHUB_REF_NAME%@*}"
           EXPECTED_FULL=""
           case "$EXPECTED_SHORT" in
             sdk) EXPECTED_FULL="@o-t-p-y/sdk" ;;
+            cli) EXPECTED_FULL="@o-t-p-y/cli" ;;
             *) EXPECTED_FULL="$EXPECTED_SHORT" ;;
           esac
           if [ "$PKG_NAME" != "$EXPECTED_FULL" ]; then
