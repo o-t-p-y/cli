@@ -1,9 +1,9 @@
 {
   "name": "@o-t-p-y/cli",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": false,
   "type": "module",
-  "description": "npx otpy-cli init — one-command OTPy integration (framework detection, code patching, AI mode).",
+  "description": "npx @o-t-p-y/cli init — one-command OTPy integration (framework detection, code patching, AI mode).",
   "license": "MIT",
   "repository": {
     "type": "git",

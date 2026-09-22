@@ -541,6 +541,30 @@ func (c *OtpClient) Send(phone string) (map[string]any, error) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	return result, nil
 }
+
+func (c *OtpClient) Verify(phone, code string) (bool, error) {
+	payload, _ := json.Marshal(map[string]string{"phone": phone, "code": code})
+	req, _ := http.NewRequest("POST", c.BaseUrl+"/v1/otp/verify", bytes.NewBuffer(payload))
+	req.Header.Set("Authorization", "Bearer "+c.ApiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, fmt.Errorf("otpy verify: HTTP %s", resp.Status)
+	}
+
+	var result struct {
+		Verified bool \`json:"verified"\`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, err
+	}
+	return result.Verified, nil
+}
 `;
 
   return [{ path: "pkg/otpy/client.go", content: code }];

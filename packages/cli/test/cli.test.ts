@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { detectNextPagesRoot, detectProject } from "../src/detector.js";
-import { appendOrUpdateEnvKey, getExistingEnvKey } from "../src/env.js";
+import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "../src/env.js";
 import {
   generateExpressTemplates,
   generateGoTemplates,
@@ -86,6 +86,28 @@ describe("otpy cli detector & env", () => {
     expect(getExistingEnvKey(envPath)).toBe("otpy_new_456");
   });
 
+  it("checks an API key through usage without turning a failed check into a throw", async () => {
+    const fetchFn = async () => new Response(JSON.stringify({ free_used_today: 0 }), { status: 200 });
+    await expect(validateApiKey("otpy_valid", fetchFn)).resolves.toEqual({ ok: true });
+
+    const invalidFetch = async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    await expect(validateApiKey("otpy_invalid", invalidFetch)).resolves.toMatchObject({
+      ok: false,
+      reason: "API returned HTTP 401",
+    });
+  });
+
+  it("adds the selected env file to a git repository's ignore rules once", () => {
+    spawnSync("git", ["init"], { cwd: tempDir, stdio: "ignore" });
+    const envPath = join(tempDir, ".env.local");
+    writeFileSync(envPath, "OTPY_API_KEY=secret\n");
+
+    expect(ensureEnvFileIgnored(tempDir, envPath)).toBe(true);
+    expect(readFileSync(join(tempDir, ".gitignore"), "utf8")).toContain(".env.local");
+    expect(ensureEnvFileIgnored(tempDir, envPath)).toBe(false);
+    expect(readFileSync(join(tempDir, ".gitignore"), "utf8").match(/\.env\.local/g)).toHaveLength(1);
+  });
+
   it("does not persist a placeholder key when init receives empty input", () => {
     // Given: a project with an existing env file and no API key
     writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "fixture" }));
@@ -120,6 +142,30 @@ describe("otpy cli detector & env", () => {
 
     const goFiles = generateGoTemplates();
     expect(goFiles.some((f) => f.path.includes("pkg/otpy/client.go"))).toBe(true);
+    expect(goFiles[0]?.content).toContain("func (c *OtpClient) Verify(phone, code string) (bool, error)");
+    expect(goFiles[0]?.content).toContain("/v1/otp/verify");
+  });
+
+  it("validates an unknown project without generating Next.js files", () => {
+    const before = readdirSync(tempDir, { recursive: true, encoding: "utf8" });
+    writeFileSync(join(tempDir, "notes.txt"), "plain project\n");
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+
+    const result = spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
+      { cwd: tempDir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("شناسایی نشد");
+    expect(result.stdout).toContain("https://api.otpy.ir/v1/otp/send");
+    expect(result.stdout).toContain("https://api.otpy.ir/v1/otp/verify");
+    const created = readdirSync(tempDir, { recursive: true, encoding: "utf8" }).filter(
+      (entry) => !before.includes(entry) && entry !== "notes.txt" && entry !== ".env",
+    );
+    expect(created).not.toContain("app/api/auth/otp/send/route.ts");
+    expect(existsSync(join(tempDir, "app/api/auth/otp/send/route.ts"))).toBe(false);
   });
 });
 
@@ -159,7 +205,7 @@ describe("otpy cli sveltekit template", () => {
     return spawnSync(
       process.execPath,
       ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8" },
+      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
     );
   }
 
@@ -283,7 +329,7 @@ describe("otpy cli next-pages template", () => {
     return spawnSync(
       process.execPath,
       ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8" },
+      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
     );
   }
 
@@ -502,7 +548,7 @@ describe("otpy cli php-laravel template", () => {
     return spawnSync(
       process.execPath,
       ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8" },
+      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
     );
   }
 

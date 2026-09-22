@@ -1,6 +1,6 @@
 # AGENTS.md — cli/otpy
 
-`npx otpy init` — integration wizard (P4): framework detection → code patch →
+`npx @o-t-p-y/cli init` — integration wizard (P4): framework detection → code patch →
 open PR (GitHub) / print instructions; `--ai` mode emits agent skill bundles.
 
 - Keep zero heavy deps; the CLI must install in seconds on slow networks.

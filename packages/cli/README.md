@@ -15,6 +15,8 @@ The CLI will:
 2. Ask for or detect your `OTPY_API_KEY` and safely update your `.env` or `.env.local`.
 3. Generate ready-to-run client and route handler files.
 
+The supplied key is checked against `GET /v1/usage`; an unavailable or rejected check prints a warning and the wizard continues. If no supported framework is detected, the wizard prints the REST integration guide and does not create framework files.
+
 ## Other Commands
 
 ### Send a Test OTP

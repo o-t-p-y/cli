@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import packageMetadata from "../package.json" with { type: "json" };
 import { detectNextPagesRoot, detectProject } from "./detector.js";
-import { appendOrUpdateEnvKey, getExistingEnvKey } from "./env.js";
+import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "./env.js";
 import {
   generateExpressTemplates,
   generateGoTemplates,
@@ -65,10 +65,18 @@ async function runInit() {
   }
 
   if (apiKey && apiKey !== placeholderApiKey) {
+    const validation = await validateApiKey(apiKey);
+    if (!validation.ok) {
+      console.log(`⚠ اعتبارسنجی کلید انجام نشد (${validation.reason}). ادامه می‌دهیم؛ کلید را بعداً بررسی کنید.`);
+    }
     appendOrUpdateEnvKey(info.envFilePath, "OTPY_API_KEY", apiKey);
     console.log(`\n✔ کلید در فایل ${info.envFilePath} ذخیره شد.`);
   } else {
     console.log(`\n💡 برای دریافت کلید API به https://dash.otpy.ir مراجعه کنید.`);
+  }
+
+  if (ensureEnvFileIgnored(cwd, info.envFilePath)) {
+    console.log(`✔ فایل ${info.envFilePath} به .gitignore اضافه شد.`);
   }
 
   // Generate templates
@@ -103,7 +111,17 @@ async function runInit() {
     console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
     console.log(`     -d '{"phone":"09123456789"}'`);
   } else {
-    filesToGenerate = generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
+    filesToGenerate = [];
+    console.log(`\n📝 فریم‌ورک پروژه شناسایی نشد؛ فایل جدیدی ساخته نمی‌شود.`);
+    console.log(`   راهنمای اتصال دستی: https://otpy.ir/docs`);
+    console.log(`\n   ارسال کد:`);
+    console.log(`   curl -X POST https://api.otpy.ir/v1/otp/send \\`);
+    console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
+    console.log(`     -d '{"phone":"09123456789"}'`);
+    console.log(`\n   تایید کد:`);
+    console.log(`   curl -X POST https://api.otpy.ir/v1/otp/verify \\`);
+    console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
+    console.log(`     -d '{"phone":"09123456789","code":"123456"}'`);
   }
 
   if (filesToGenerate.length > 0) {
