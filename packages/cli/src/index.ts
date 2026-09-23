@@ -16,19 +16,11 @@ import {
   phpLaravelRoutesSnippet,
   type GeneratedFile,
 } from "./templates.js";
+import { printBanner, spinner } from "./ui.js";
 
 const args = process.argv.slice(2);
 const command = args[0] || "init";
 const placeholderApiKey = "otpy_test_key_replace_with_yours";
-
-function printBanner() {
-  console.log(`
-┌────────────────────────────────────────────────────────┐
-│  OTPy.ir — سامانه هوشمند ارسال پیامک کد ورود (OTP)     │
-│  سریع، اقتصادی، بدون خط اختصاصی و قرارداد              │
-└────────────────────────────────────────────────────────┘
-`);
-}
 
 function prompt(question: string): Promise<string> {
   const rl = createInterface({
@@ -48,10 +40,10 @@ async function runInit() {
   const cwd = process.cwd();
   const info = detectProject(cwd);
 
-  console.log(`🔍 بررسی پروژه...`);
-  console.log(`   فریم‌ورک شناسایی شده: ${info.framework}`);
-  console.log(`   پشتیبانی از تایپ‌اسکریپت: ${info.isTypeScript ? "بله" : "خیر"}`);
-  console.log(`   فایل محیطی (.env): ${info.envFilePath}\n`);
+  console.log(`🔍 Scanning project...`);
+  console.log(`   Detected framework: ${info.framework}`);
+  console.log(`   TypeScript: ${info.isTypeScript ? "yes" : "no"}`);
+  console.log(`   Env file: ${info.envFilePath}\n`);
 
   let apiKey: string | null = getExistingEnvKey(info.envFilePath);
   const cliKeyArgIndex = args.indexOf("--api-key");
@@ -60,23 +52,26 @@ async function runInit() {
   }
 
   if (!apiKey) {
-    console.log(`💡 کلید API پروژه خود را وارد کنید (یا از داشبورد https://dash.otpy.ir کپی کنید):`);
-    apiKey = (await prompt("🔑 کلید API: ")) || null;
+    console.log(`💡 Enter your project API key (copy it from https://dash.otpy.ir):`);
+    apiKey = (await prompt("🔑 API key: ")) || null;
   }
 
   if (apiKey && apiKey !== placeholderApiKey) {
-    const validation = await validateApiKey(apiKey);
-    if (!validation.ok) {
-      console.log(`⚠ اعتبارسنجی کلید انجام نشد (${validation.reason}). ادامه می‌دهیم؛ کلید را بعداً بررسی کنید.`);
+    const s = spinner("🔑 Validating API key...");
+    const validation = await validateApiKey(apiKey).finally(() => s.stop());
+    if (validation.ok) {
+      console.log(`✅ API key validated.`);
+    } else {
+      console.log(`⚠️  Key validation failed (${validation.reason}). Continuing anyway — double-check the key later.`);
     }
     appendOrUpdateEnvKey(info.envFilePath, "OTPY_API_KEY", apiKey);
-    console.log(`\n✔ کلید در فایل ${info.envFilePath} ذخیره شد.`);
+    console.log(`\n✅ Key saved to ${info.envFilePath}.`);
   } else {
-    console.log(`\n💡 برای دریافت کلید API به https://dash.otpy.ir مراجعه کنید.`);
+    console.log(`\n💡 Get your API key at https://dash.otpy.ir`);
   }
 
   if (ensureEnvFileIgnored(cwd, info.envFilePath)) {
-    console.log(`✔ فایل ${info.envFilePath} به .gitignore اضافه شد.`);
+    console.log(`✅ Added ${info.envFilePath} to .gitignore.`);
   }
 
   // Generate templates
@@ -99,33 +94,33 @@ async function runInit() {
   } else if (info.framework === "php-laravel") {
     filesToGenerate = generatePhpLaravelTemplates();
     if (existsSync(join(cwd, "routes/api.php"))) {
-      console.log(`\n📝 فایل routes/api.php از قبل موجود است؛ این خطوط را به آن اضافه کنید:`);
+      console.log(`\n📝 routes/api.php already exists — append these lines manually:`);
       console.log(phpLaravelRoutesSnippet);
     }
   } else if (info.framework === "php-generic") {
     filesToGenerate = [];
-    console.log(`\n🐘 پروژه PHP شناسایی شد، اما فریم‌ورک پشتیبانی‌شده‌ای (Laravel) پیدا نشد.`);
-    console.log(`   برای ادغام دستی، مستندات را ببینید: https://otpy.ir/docs`);
-    console.log(`   نمونه ارسال با cURL:`);
+    console.log(`\n🐘 PHP project detected, but no supported framework (Laravel) found.`);
+    console.log(`   Manual integration guide: https://otpy.ir/docs`);
+    console.log(`   Send OTP with cURL:`);
     console.log(`   curl -X POST https://api.otpy.ir/v1/otp/send \\`);
     console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
     console.log(`     -d '{"phone":"09123456789"}'`);
   } else {
     filesToGenerate = [];
-    console.log(`\n📝 فریم‌ورک پروژه شناسایی نشد؛ فایل جدیدی ساخته نمی‌شود.`);
-    console.log(`   راهنمای اتصال دستی: https://otpy.ir/docs`);
-    console.log(`\n   ارسال کد:`);
+    console.log(`\n📝 No supported framework detected; no files were generated.`);
+    console.log(`   Manual integration guide: https://otpy.ir/docs`);
+    console.log(`\n   Send:`);
     console.log(`   curl -X POST https://api.otpy.ir/v1/otp/send \\`);
     console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
     console.log(`     -d '{"phone":"09123456789"}'`);
-    console.log(`\n   تایید کد:`);
+    console.log(`\n   Verify:`);
     console.log(`   curl -X POST https://api.otpy.ir/v1/otp/verify \\`);
     console.log(`     -H "Authorization: Bearer $OTPY_API_KEY" -H "Content-Type: application/json" \\`);
     console.log(`     -d '{"phone":"09123456789","code":"123456"}'`);
   }
 
   if (filesToGenerate.length > 0) {
-    console.log(`\n📦 در حال ایجاد فایل‌های ادغام و کلاینت:`);
+    console.log(`\n📦 Generating integration files:`);
     for (const file of filesToGenerate) {
       const fullPath = join(cwd, file.path);
       const parentDir = dirname(fullPath);
@@ -134,48 +129,48 @@ async function runInit() {
       }
       if (!existsSync(fullPath)) {
         writeFileSync(fullPath, file.content, "utf8");
-        console.log(`   + ایجاد فایل: ${file.path}`);
+        console.log(`   ✅ created ${file.path}`);
       } else {
-        console.log(`   ~ فایل موجود بود (رد شد): ${file.path}`);
+        console.log(`   ⏭️  skipped (exists): ${file.path}`);
       }
     }
   }
 
   if (args.includes("--ai")) {
-    console.log(`\n🤖 دستورالعمل هوش مصنوعی برای ابزارهای Cursor / Windsurf / Claude Code:`);
+    console.log(`\n🤖 AI assistant instructions (Cursor / Windsurf / Claude Code):`);
     if (info.framework === "php-laravel" || info.framework === "php-generic") {
       console.log(`   - REST API: https://api.otpy.ir`);
-      console.log(`   - ارسال: POST /v1/otp/send با بدنه {"phone": "09123456789"}`);
-      console.log(`   - تایید: POST /v1/otp/verify با بدنه {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
+      console.log(`   - Send: POST /v1/otp/send with body {"phone": "09123456789"}`);
+      console.log(`   - Verify: POST /v1/otp/verify with body {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
     } else {
-      console.log(`   - کتابخانه: @o-t-p-y/sdk`);
-      console.log(`   - ارسال: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
-      console.log(`   - تایید: otpy.verifyOtp(phone, code) -> { verified: true }`);
+      console.log(`   - Library: @o-t-p-y/sdk`);
+      console.log(`   - Send: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
+      console.log(`   - Verify: otpy.verifyOtp(phone, code) -> { verified: true }`);
     }
   }
 
   if (info.framework === "php-generic") {
     console.log(`
-برای راهنمای کامل ادغام دستی به https://otpy.ir/docs مراجعه کنید.
-داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
+For the full manual integration guide, see https://otpy.ir/docs
+Dashboard & live stats: https://dash.otpy.ir
 `);
   } else if (info.framework === "php-laravel") {
     console.log(`
-🎉 تبریک! ادغام با موفقیت انجام شد.
+🎉 Integration complete!
 
-مراحل بعدی:
-  ۱. اجرای سرور محلی: php artisan serve
-  ۲. تست ارسال: curl -X POST http://localhost:8000/api/auth/otp/send -H "Content-Type: application/json" -d '{"phone":"09123456789"}'
-  ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
+Next steps:
+  1. Start the dev server: php artisan serve
+  2. Test send: curl -X POST http://localhost:8000/api/auth/otp/send -H "Content-Type: application/json" -d '{"phone":"09123456789"}'
+  3. Dashboard & live stats: https://dash.otpy.ir
 `);
   } else {
     console.log(`
-🎉 تبریک! ادغام با موفقیت انجام شد.
+🎉 Integration complete!
 
-مراحل بعدی:
-  ۱. برای نصب پکیج: npm install @o-t-p-y/sdk
-  ۲. برای تست ارسال پیامک: npx @o-t-p-y/cli test 09123456789
-  ۳. داشبورد و آمار لحظه‌ای: https://dash.otpy.ir
+Next steps:
+  1. Install the SDK: npm install @o-t-p-y/sdk
+  2. Send a test SMS: npx @o-t-p-y/cli test 09123456789
+  3. Dashboard & live stats: https://dash.otpy.ir
 `);
   }
 }
@@ -183,18 +178,19 @@ async function runInit() {
 async function runTest() {
   const phone = args[1];
   if (!phone || !/^09\d{9}$/.test(phone)) {
-    console.log("❌ خطا: شماره موبایل معتبر الزامی است. مثال: npx @o-t-p-y/cli test 09123456789");
+    // Error lines stay on stdout (behavior preserved); only the spinner uses stderr.
+    console.log("❌ Error: a valid mobile number is required. Example: npx @o-t-p-y/cli test 09123456789");
     process.exit(1);
   }
 
   const info = detectProject(process.cwd());
   const apiKey = getExistingEnvKey(info.envFilePath);
   if (!apiKey) {
-    console.log("❌ کلید OTPY_API_KEY در فایل .env یافت نشد. ابتدا npx @o-t-p-y/cli init را اجرا کنید.");
+    console.log("❌ OTPY_API_KEY not found in .env — run npx @o-t-p-y/cli init first.");
     process.exit(1);
   }
 
-  console.log(`🚀 در حال ارسال کد تست به شماره ${phone}...`);
+  const s = spinner(`🚀 Sending test OTP to ${phone}...`);
   try {
     const res = await fetch("https://api.otpy.ir/v1/otp/send", {
       method: "POST",
@@ -203,18 +199,21 @@ async function runTest() {
         "content-type": "application/json",
       },
       body: JSON.stringify({ phone }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const data = (await res.json()) as { request_id?: string; error?: string; free?: boolean };
+    s.stop();
     if (res.ok) {
-      console.log(`✔ پیامک ارسال شد!`);
-      console.log(`   شناسه پیامک: ${data.request_id}`);
-      console.log(`   نوع مصرف: ${data.free ? "سهمیه رایگان روزانه" : "شارژی"}`);
+      console.log(`✅ SMS sent!`);
+      console.log(`   Request ID: ${data.request_id}`);
+      console.log(`   Billing: ${data.free ? "daily free quota" : "paid credit"}`);
     } else {
-      console.log(`❌ خطا در ارسال پیامک: ${data.error || res.statusText}`);
+      console.log(`❌ Failed to send SMS: ${data.error || res.statusText}`);
     }
   } catch (err) {
-    console.log(`❌ خطای شبکه: ${String(err)}`);
+    s.stop();
+    console.log(`❌ Network error: ${String(err)}`);
   }
 }
 
@@ -222,14 +221,16 @@ async function runUsage() {
   const info = detectProject(process.cwd());
   const apiKey = getExistingEnvKey(info.envFilePath);
   if (!apiKey) {
-    console.log("❌ کلید OTPY_API_KEY در فایل .env یافت نشد.");
+    console.log("❌ OTPY_API_KEY not found in .env — run npx @o-t-p-y/cli init first.");
     process.exit(1);
   }
 
+  const s = spinner(`📊 Fetching usage...`);
   try {
     const res = await fetch("https://api.otpy.ir/v1/usage", {
       method: "GET",
       headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
     });
     const data = (await res.json()) as {
       free_used_today: number;
@@ -237,16 +238,18 @@ async function runUsage() {
       paid_today: number;
       daily_limit: number | null;
     };
+    s.stop();
     if (res.ok) {
-      console.log(`📊 آمار مصرف امروز:`);
-      console.log(`   رایگان مصرف شده: ${data.free_used_today} از ${data.free_quota_today}`);
-      console.log(`   پیامک‌های شارژی: ${data.paid_today}`);
-      console.log(`   سقف کل روزانه: ${data.daily_limit ? data.daily_limit : "نامحدود"}`);
+      console.log(`📊 Today's usage:`);
+      console.log(`   Free quota used: ${data.free_used_today} of ${data.free_quota_today}`);
+      console.log(`   Paid SMS: ${data.paid_today}`);
+      console.log(`   Daily limit: ${data.daily_limit ? data.daily_limit : "unlimited"}`);
     } else {
-      console.log(`❌ خطا در استعلام آمار.`);
+      console.log(`❌ Failed to fetch usage.`);
     }
   } catch (err) {
-    console.log(`❌ خطای شبکه: ${String(err)}`);
+    s.stop();
+    console.log(`❌ Network error: ${String(err)}`);
   }
 }
 
@@ -257,12 +260,12 @@ if (command === "--version" || command === "-v") {
 
 if (command === "--help" || command === "-h") {
   console.log(`
-استفاده از دستورات ابزار خط فرمان OTPy:
-  npx @o-t-p-y/cli init         راه‌اندازی خودکار پروژه و تولید فایل‌های آماده
-  npx @o-t-p-y/cli init --ai    راه‌اندازی به همراه راهنمای ایجنت‌های هوش مصنوعی
-  npx @o-t-p-y/cli test <phone> ارسال پیامک تست به شماره دلخواه
-  npx @o-t-p-y/cli usage        مشاهده آمار مصرف امروز سهمیه
-  npx @o-t-p-y/cli --version    نسخه CLI
+Usage: npx @o-t-p-y/cli <command>
+  npx @o-t-p-y/cli init         Set up your project and generate integration files
+  npx @o-t-p-y/cli init --ai    Set up with AI assistant instructions
+  npx @o-t-p-y/cli test <phone> Send a test OTP SMS to any number
+  npx @o-t-p-y/cli usage        Show today's usage and quota
+  npx @o-t-p-y/cli --version    CLI version
 `);
   process.exit(0);
 }
@@ -274,6 +277,6 @@ if (command === "init") {
 } else if (command === "usage") {
   runUsage().catch(console.error);
 } else {
-  console.log(`دستور ناشناخته: ${command}\nبرای راهنما npx @o-t-p-y/cli --help را اجرا کنید.`);
+  console.log(`Unknown command: ${command}\nRun npx @o-t-p-y/cli --help for usage.`);
   process.exit(1);
 }

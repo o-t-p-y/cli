@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detectNextPagesRoot, detectProject } from "../src/detector.js";
 import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "../src/env.js";
 import {
@@ -16,6 +16,7 @@ import {
   generatePythonFastApiTemplates,
   generateSvelteKitTemplates,
 } from "../src/templates.js";
+import { BANNER_TEXT, BRAILLE_FRAMES, spinner } from "../src/ui.js";
 
 const requireFromTest = createRequire(import.meta.url);
 
@@ -158,7 +159,7 @@ describe("otpy cli detector & env", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("شناسایی نشد");
+    expect(result.stdout).toContain("No supported framework detected");
     expect(result.stdout).toContain("https://api.otpy.ir/v1/otp/send");
     expect(result.stdout).toContain("https://api.otpy.ir/v1/otp/verify");
     const created = readdirSync(tempDir, { recursive: true, encoding: "utf8" }).filter(
@@ -279,7 +280,7 @@ describe("otpy cli sveltekit template", () => {
 
     expect(result.status).toBe(0);
     expect(readFileSync(join(tempDir, "src/lib/otpy.ts"), "utf8")).toBe(marker);
-    expect(result.stdout).toContain("رد شد");
+    expect(result.stdout).toContain("skipped");
   });
 });
 
@@ -487,7 +488,7 @@ describe("otpy cli next-pages template", () => {
     const second = runCliInit(tempDir);
 
     expect(second.status).toBe(0);
-    expect(second.stdout).toContain("رد شد");
+    expect(second.stdout).toContain("skipped");
     expect(readFileSync(sendPath, "utf8")).toBe(firstContent);
   });
 
@@ -659,7 +660,7 @@ describe("otpy cli php-laravel template", () => {
     const second = runCliInit(tempDir);
 
     expect(second.status).toBe(0);
-    expect(second.stdout).toContain("رد شد");
+    expect(second.stdout).toContain("skipped");
     expect(readFileSync(controllerPath, "utf8")).toBe(firstContent);
   });
 
@@ -681,4 +682,130 @@ describe("otpy cli php-laravel template", () => {
     expect(existsSync(join(tempDir, "app/Http/Controllers/OtpController.php"))).toBe(false);
     expect(result.stdout).not.toContain("npm install");
   });
+});
+
+describe("otpy cli ui", () => {
+  it("keeps the banner ASCII-only and every box line exactly 56 code points wide", () => {
+    const lines = BANNER_TEXT.replace(/^\n/, "").replace(/\n$/, "").split("\n");
+
+    expect(lines).toHaveLength(4);
+    for (const line of lines) {
+      expect(line).toMatch(/^[\x20-\x7E│┌┐└┘─]+$/);
+      expect([...line]).toHaveLength(56);
+    }
+  });
+
+  it("uses exactly ten braille frames inside the U+28xx block", () => {
+    expect([...BRAILLE_FRAMES]).toHaveLength(10);
+    for (const frame of BRAILLE_FRAMES) {
+      const codePoint = frame.codePointAt(0)!;
+      expect(codePoint).toBeGreaterThanOrEqual(0x2800);
+      expect(codePoint).toBeLessThanOrEqual(0x28ff);
+    }
+  });
+
+  it("degrades to static stderr lines with no frames or ANSI when not interactive", () => {
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    const previous = process.env.OTPY_NO_SPINNER;
+    process.env.OTPY_NO_SPINNER = "1";
+    try {
+      const first = spinner("working");
+      first.succeed("done");
+      first.fail("ignored");
+
+      const second = spinner("working again");
+      second.fail("nope");
+      second.stop();
+    } finally {
+      spy.mockRestore();
+      if (previous === undefined) {
+        delete process.env.OTPY_NO_SPINNER;
+      } else {
+        process.env.OTPY_NO_SPINNER = previous;
+      }
+    }
+
+    expect(writes).toEqual(["working\n", "done\n", "working again\n", "nope\n"]);
+    expect(writes.join("")).not.toContain("\r");
+    expect(writes.join("")).not.toContain("\x1b");
+  });
+});
+
+describe("otpy cli English-only output invariant", () => {
+  const persian = /[\u0600-\u06FF\u200C]/;
+
+  function runCli(args: string[], dir: string): ReturnType<typeof spawnSync> {
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    return spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, ...args],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
+    );
+  }
+
+  const fixtures: Array<{ name: string; setup: (dir: string) => void; args: string[] }> = [
+    {
+      name: "unknown framework",
+      setup: (dir) => {
+        writeFileSync(join(dir, "notes.txt"), "plain project\n");
+      },
+      args: ["init", "--api-key", "otpy_test_key_123"],
+    },
+    {
+      name: "sveltekit",
+      setup: (dir) => {
+        writeFileSync(
+          join(dir, "package.json"),
+          JSON.stringify({ name: "sveltekit-fixture", devDependencies: { "@sveltejs/kit": "^2.5.0" } }),
+        );
+        writeFileSync(join(dir, "tsconfig.json"), "{}");
+        writeFileSync(join(dir, ".env"), "PORT=5173\n");
+        mkdirSync(join(dir, "src", "routes"), { recursive: true });
+      },
+      args: ["init", "--api-key", "otpy_test_key_123"],
+    },
+    {
+      name: "php-laravel with pre-existing routes/api.php",
+      setup: (dir) => {
+        writeFileSync(
+          join(dir, "composer.json"),
+          JSON.stringify({ name: "fixture/app", require: { php: "^8.2", "laravel/framework": "^11.0" } }),
+        );
+        writeFileSync(join(dir, "artisan"), "#!/usr/bin/env php\n<?php\n");
+        writeFileSync(join(dir, ".env"), "APP_ENV=local\n");
+        mkdirSync(join(dir, "routes"));
+        writeFileSync(join(dir, "routes", "api.php"), "<?php\n// custom routes\n");
+      },
+      args: ["init", "--api-key", "otpy_test_key_123"],
+    },
+    {
+      name: "init --ai",
+      setup: (dir) => {
+        writeFileSync(join(dir, "notes.txt"), "plain project\n");
+      },
+      args: ["init", "--ai", "--api-key", "otpy_test_key_123"],
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    it(`emits no Persian, carriage returns, or ANSI: ${fixture.name}`, () => {
+      const dir = mkdtempSync(join(tmpdir(), "otpy-cli-i18n-"));
+      try {
+        fixture.setup(dir);
+        const result = runCli(fixture.args, dir);
+
+        expect(result.status).toBe(0);
+        const combined = `${result.stdout}${result.stderr}`;
+        expect(combined).not.toMatch(persian);
+        expect(combined).not.toContain("\r");
+        expect(combined).not.toContain("\x1b");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
 });

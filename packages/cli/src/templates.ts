@@ -416,6 +416,9 @@ def verify_otp(req: VerifyOtpRequest):
   return [{ path: "routers/otp.py", content: code }];
 }
 
+// Printed to the terminal via index.ts — keep this snippet ASCII-only so the
+// CLI's English-only output invariant holds. Never print other template
+// contents (they carry intentional Persian end-user error strings).
 export const phpLaravelRoutesSnippet = `Route::post('/auth/otp/send', [OtpController::class, 'send']);
 Route::post('/auth/otp/verify', [OtpController::class, 'verify']);
 `;
