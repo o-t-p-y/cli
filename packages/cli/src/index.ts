@@ -221,6 +221,7 @@ async function runUsage() {
   const info = detectProject(process.cwd());
   const apiKey = getExistingEnvKey(info.envFilePath);
   if (!apiKey) {
+    // Error lines stay on stdout (behavior preserved); only the spinner uses stderr.
     console.log("❌ OTPY_API_KEY not found in .env — run npx @o-t-p-y/cli init first.");
     process.exit(1);
   }
