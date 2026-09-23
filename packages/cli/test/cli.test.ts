@@ -861,6 +861,22 @@ describe("otpy cli framework-aware --ai instructions", () => {
       expects: ["@o-t-p-y/sdk"],
       rejects: ["REST API"],
     },
+    {
+      // Regression pin: PHP used to hit the REST branch via an explicit check;
+      // it now flows through !usesJsSdk(). Pin both the --ai REST lines and the
+      // untouched laravel next-steps so a future JS-list edit cannot silently
+      // flip PHP to the SDK path.
+      name: "php-laravel keeps REST instructions",
+      setup: (dir) => {
+        writeFileSync(
+          join(dir, "composer.json"),
+          JSON.stringify({ require: { php: "^8.2", "laravel/framework": "^11.0" } }),
+        );
+        writeFileSync(join(dir, "artisan"), "#!/usr/bin/env php\n<?php\n");
+      },
+      expects: ["REST API: https://api.otpy.ir", "php artisan serve"],
+      rejects: ["@o-t-p-y/sdk", "Install the SDK"],
+    },
   ];
 
   for (const fixture of fixtures) {
