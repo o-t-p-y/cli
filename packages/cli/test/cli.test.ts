@@ -809,3 +809,78 @@ describe("otpy cli English-only output invariant", () => {
     });
   }
 });
+
+describe("otpy cli framework-aware --ai instructions", () => {
+  function runCli(args: string[], dir: string): ReturnType<typeof spawnSync> {
+    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    return spawnSync(
+      process.execPath,
+      ["--import", requireFromTest.resolve("tsx"), cliPath, ...args],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
+    );
+  }
+
+  const fixtures: Array<{
+    name: string;
+    setup: (dir: string) => void;
+    expects: string[];
+    rejects: string[];
+  }> = [
+    {
+      name: "python-fastapi gets REST instructions",
+      setup: (dir) => {
+        writeFileSync(join(dir, "requirements.txt"), "fastapi\nuvicorn\n");
+      },
+      expects: ["REST API: https://api.otpy.ir", "POST /v1/otp/send"],
+      rejects: ["@o-t-p-y/sdk", "npm install"],
+    },
+    {
+      name: "go gets REST instructions",
+      setup: (dir) => {
+        writeFileSync(join(dir, "go.mod"), "module example.com/app\n");
+      },
+      expects: ["REST API: https://api.otpy.ir", "POST /v1/otp/send"],
+      rejects: ["@o-t-p-y/sdk", "npm install"],
+    },
+    {
+      name: "unknown gets REST instructions",
+      setup: (dir) => {
+        writeFileSync(join(dir, "notes.txt"), "plain project\n");
+      },
+      expects: ["REST API: https://api.otpy.ir"],
+      rejects: ["@o-t-p-y/sdk"],
+    },
+    {
+      name: "express gets SDK instructions",
+      setup: (dir) => {
+        writeFileSync(
+          join(dir, "package.json"),
+          JSON.stringify({ name: "express-fixture", dependencies: { express: "^4.19.2" } }),
+        );
+      },
+      expects: ["@o-t-p-y/sdk"],
+      rejects: ["REST API"],
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    it(fixture.name, () => {
+      const dir = mkdtempSync(join(tmpdir(), "otpy-cli-ai-"));
+      try {
+        fixture.setup(dir);
+        const result = runCli(["init", "--ai", "--api-key", "otpy_test_key_123"], dir);
+
+        expect(result.status).toBe(0);
+        const output = `${result.stdout}${result.stderr}`;
+        for (const expected of fixture.expects) {
+          expect(output).toContain(expected);
+        }
+        for (const rejected of fixture.rejects) {
+          expect(output).not.toContain(rejected);
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
+});

@@ -37,7 +37,7 @@ npx @o-t-p-y/cli usage
 npx @o-t-p-y/cli init --ai
 ```
 
-Outputs prompt instructions for AI coding assistants (Cursor, Windsurf, Claude Code, GitHub Copilot).
+Outputs prompt instructions for AI coding assistants (Cursor, Windsurf, Claude Code, GitHub Copilot). The instructions are framework-aware: JavaScript projects get `@o-t-p-y/sdk` guidance, while Python, Go, PHP, and unknown projects get REST API instructions.
 
 ## License
 

@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import packageMetadata from "../package.json" with { type: "json" };
-import { detectNextPagesRoot, detectProject } from "./detector.js";
+import { detectNextPagesRoot, detectProject, usesJsSdk } from "./detector.js";
 import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "./env.js";
 import {
   generateExpressTemplates,
@@ -138,14 +138,14 @@ async function runInit() {
 
   if (args.includes("--ai")) {
     console.log(`\n🤖 AI assistant instructions (Cursor / Windsurf / Claude Code):`);
-    if (info.framework === "php-laravel" || info.framework === "php-generic") {
-      console.log(`   - REST API: https://api.otpy.ir`);
-      console.log(`   - Send: POST /v1/otp/send with body {"phone": "09123456789"}`);
-      console.log(`   - Verify: POST /v1/otp/verify with body {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
-    } else {
+    if (usesJsSdk(info.framework)) {
       console.log(`   - Library: @o-t-p-y/sdk`);
       console.log(`   - Send: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
       console.log(`   - Verify: otpy.verifyOtp(phone, code) -> { verified: true }`);
+    } else {
+      console.log(`   - REST API: https://api.otpy.ir`);
+      console.log(`   - Send: POST /v1/otp/send with body {"phone": "09123456789"}`);
+      console.log(`   - Verify: POST /v1/otp/verify with body {"phone": "09123456789", "code": "123456"} → {verified: boolean}`);
     }
   }
 
@@ -163,12 +163,21 @@ Next steps:
   2. Test send: curl -X POST http://localhost:8000/api/auth/otp/send -H "Content-Type: application/json" -d '{"phone":"09123456789"}'
   3. Dashboard & live stats: https://dash.otpy.ir
 `);
-  } else {
+  } else if (usesJsSdk(info.framework)) {
     console.log(`
 🎉 Integration complete!
 
 Next steps:
   1. Install the SDK: npm install @o-t-p-y/sdk
+  2. Send a test SMS: npx @o-t-p-y/cli test 09123456789
+  3. Dashboard & live stats: https://dash.otpy.ir
+`);
+  } else {
+    console.log(`
+🎉 Integration complete!
+
+Next steps:
+  1. REST API base: https://api.otpy.ir — integrate over HTTP; no npm package needed
   2. Send a test SMS: npx @o-t-p-y/cli test 09123456789
   3. Dashboard & live stats: https://dash.otpy.ir
 `);

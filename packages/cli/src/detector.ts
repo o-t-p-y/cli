@@ -25,6 +25,18 @@ export interface ProjectInfo {
 
 export type NextPagesRoot = "pages" | "src/pages";
 
+// Explicit JS-SDK list: everything else gets REST instructions. Inverting the
+// default this way keeps future non-JS frameworks on the safe REST path.
+export function usesJsSdk(framework: Framework): boolean {
+  return (
+    framework === "next-app" ||
+    framework === "next-pages" ||
+    framework === "sveltekit" ||
+    framework === "express" ||
+    framework === "node-generic"
+  );
+}
+
 // Next.js ignores src/pages when a root pages dir exists — root wins.
 export function detectNextPagesRoot(cwd: string = process.cwd()): NextPagesRoot {
   if (existsSync(join(cwd, "pages"))) return "pages";
