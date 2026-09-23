@@ -93,13 +93,11 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo {
         };
       }
 
-      return {
-        framework: "node-generic",
-        isTypeScript: hasTsConfig,
-        hasSrcDir,
-        hasEnvFile,
-        envFilePath,
-      };
+      // A bare package.json is not an explicit JavaScript declaration: fall
+      // through so non-JS markers below win. Hybrid repos (e.g. a Python
+      // backend with a tooling package.json) must not get JS files generated
+      // into them. An explicit framework dependency above still wins — a
+      // declared dependency is intent, a bare package.json is not.
     } catch {
       // Fall through
     }
@@ -146,6 +144,17 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo {
     return {
       framework: "go",
       isTypeScript: false,
+      hasSrcDir,
+      hasEnvFile,
+      envFilePath,
+    };
+  }
+
+  // Bare package.json with no framework deps and no non-JS markers: plain Node.
+  if (hasPkgJson) {
+    return {
+      framework: "node-generic",
+      isTypeScript: hasTsConfig,
       hasSrcDir,
       hasEnvFile,
       envFilePath,

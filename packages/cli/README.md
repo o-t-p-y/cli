@@ -17,6 +17,8 @@ The CLI will:
 
 The supplied key is checked against `GET /v1/usage`; an unavailable or rejected check prints a warning and the wizard continues. If no supported framework is detected, the wizard prints the REST integration guide and does not create framework files.
 
+The CLI works with any code stack. Hybrid repos are detected by their non-JS markers (`requirements.txt`/`pyproject.toml`, `composer.json`, `go.mod`) even when a bare `package.json` is present, so mixed stacks get REST instructions instead of JavaScript files. Django projects get a framework-neutral REST client (`otpy_client.py`) rather than the FastAPI router.
+
 ## Other Commands
 
 ### Send a Test OTP

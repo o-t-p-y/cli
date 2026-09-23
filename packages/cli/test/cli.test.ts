@@ -14,11 +14,28 @@ import {
   generateNextPagesTemplates,
   generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
+  generatePythonTemplates,
   generateSvelteKitTemplates,
 } from "../src/templates.js";
 import { BANNER_TEXT, BRAILLE_FRAMES, spinner } from "../src/ui.js";
 
 const requireFromTest = createRequire(import.meta.url);
+
+// Shared spawn helper: runs the CLI from source with a dead OTPY_BASE_URL so
+// key validation fails fast offline. One definition, used by every describe
+// below (describe-scoped duplicates were drift-prone).
+function runCli(args: string[], dir: string): ReturnType<typeof spawnSync> {
+  const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+  return spawnSync(
+    process.execPath,
+    ["--import", requireFromTest.resolve("tsx"), cliPath, ...args],
+    { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
+  );
+}
+
+function runCliInit(dir: string): ReturnType<typeof spawnSync> {
+  return runCli(["init", "--api-key", "otpy_test_key_123"], dir);
+}
 
 describe("otpy cli detector & env", () => {
   let tempDir: string;
@@ -69,6 +86,30 @@ describe("otpy cli detector & env", () => {
     writeFileSync(join(tempDir, "go.mod"), "module example.com/app\n");
     const goInfo = detectProject(tempDir);
     expect(goInfo.framework).toBe("go");
+  });
+
+  it("prefers non-JS markers over a bare package.json (hybrid stacks)", () => {
+    // Given: a repo with a tooling package.json but no JS framework deps
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "hybrid" }));
+    writeFileSync(join(tempDir, "requirements.txt"), "fastapi\nuvicorn\n");
+
+    // When: the CLI detects the project
+    // Then: the non-JS marker wins — the project must not get JS files
+    expect(detectProject(tempDir).framework).toBe("python-fastapi");
+
+    rmSync(join(tempDir, "requirements.txt"));
+    writeFileSync(join(tempDir, "go.mod"), "module example.com/app\n");
+    expect(detectProject(tempDir).framework).toBe("go");
+  });
+
+  it("keeps an explicit JS dependency winning over non-JS markers", () => {
+    // A declared framework dependency is intent; a bare package.json is not.
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({ dependencies: { express: "^4.19.2" } }),
+    );
+    writeFileSync(join(tempDir, "requirements.txt"), "fastapi\n");
+    expect(detectProject(tempDir).framework).toBe("express");
   });
 
   it("appends and updates OTPY_API_KEY without clobbering existing env variables", () => {
@@ -141,6 +182,13 @@ describe("otpy cli detector & env", () => {
     expect(pythonFiles.some((f) => f.path.includes("routers/otp.py"))).toBe(true);
     expect(pythonFiles.map((file) => file.content).join("\n")).toContain("pip install requests fastapi");
 
+    const pyClient = generatePythonTemplates();
+    expect(pyClient.some((f) => f.path === "otpy_client.py")).toBe(true);
+    const pyClientContent = pyClient.map((file) => file.content).join("\n");
+    expect(pyClientContent).toContain("import requests");
+    expect(pyClientContent).not.toContain("fastapi");
+    expect(pyClientContent).not.toContain("APIRouter");
+
     const goFiles = generateGoTemplates();
     expect(goFiles.some((f) => f.path.includes("pkg/otpy/client.go"))).toBe(true);
     expect(goFiles[0]?.content).toContain("func (c *OtpClient) Verify(phone, code string) (bool, error)");
@@ -199,15 +247,6 @@ describe("otpy cli sveltekit template", () => {
     return readdirSync(root, { recursive: true, encoding: "utf8" })
       .filter((entry) => statSync(join(root, entry)).isFile())
       .sort();
-  }
-
-  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
-    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-    return spawnSync(
-      process.execPath,
-      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
-    );
   }
 
   it("detects a SvelteKit project and keeps the existing .env as the env file", () => {
@@ -323,15 +362,6 @@ describe("otpy cli next-pages template", () => {
     return readdirSync(root, { recursive: true, encoding: "utf8" })
       .filter((entry) => statSync(join(root, entry)).isFile())
       .sort();
-  }
-
-  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
-    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-    return spawnSync(
-      process.execPath,
-      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
-    );
   }
 
   it("detects next-app when an app dir exists, even alongside a pages dir", () => {
@@ -544,15 +574,6 @@ describe("otpy cli php-laravel template", () => {
       .sort();
   }
 
-  function runCliInit(dir: string): ReturnType<typeof spawnSync> {
-    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-    return spawnSync(
-      process.execPath,
-      ["--import", requireFromTest.resolve("tsx"), cliPath, "init", "--api-key", "otpy_test_key_123"],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
-    );
-  }
-
   it("detects php-laravel only when composer.json is paired with artisan", () => {
     // Given: a composer.json project with the artisan marker
     writeComposerFixture(tempDir, true);
@@ -672,6 +693,7 @@ describe("otpy cli php-laravel template", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("php-generic");
+    expect(result.stdout).toContain("Integration complete!");
     expect(result.stdout).toContain("https://otpy.ir/docs");
 
     const created = listFiles(tempDir).filter((f) => !before.includes(f));
@@ -738,15 +760,6 @@ describe("otpy cli ui", () => {
 describe("otpy cli English-only output invariant", () => {
   const persian = /[\u0600-\u06FF\u200C]/;
 
-  function runCli(args: string[], dir: string): ReturnType<typeof spawnSync> {
-    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-    return spawnSync(
-      process.execPath,
-      ["--import", requireFromTest.resolve("tsx"), cliPath, ...args],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
-    );
-  }
-
   const fixtures: Array<{ name: string; setup: (dir: string) => void; args: string[] }> = [
     {
       name: "unknown framework",
@@ -811,15 +824,6 @@ describe("otpy cli English-only output invariant", () => {
 });
 
 describe("otpy cli framework-aware --ai instructions", () => {
-  function runCli(args: string[], dir: string): ReturnType<typeof spawnSync> {
-    const cliPath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-    return spawnSync(
-      process.execPath,
-      ["--import", requireFromTest.resolve("tsx"), cliPath, ...args],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, OTPY_BASE_URL: "http://127.0.0.1:1" } },
-    );
-  }
-
   const fixtures: Array<{
     name: string;
     setup: (dir: string) => void;
@@ -862,10 +866,24 @@ describe("otpy cli framework-aware --ai instructions", () => {
       rejects: ["REST API"],
     },
     {
-      // Regression pin: PHP used to hit the REST branch via an explicit check;
-      // it now flows through !usesJsSdk(). Pin both the --ai REST lines and the
-      // untouched laravel next-steps so a future JS-list edit cannot silently
-      // flip PHP to the SDK path.
+      name: "python-django gets REST instructions and a neutral client",
+      setup: (dir) => {
+        writeFileSync(join(dir, "requirements.txt"), "django\n");
+        writeFileSync(join(dir, "manage.py"), "#!/usr/bin/env python\n");
+      },
+      expects: ["REST API: https://api.otpy.ir", "created otpy_client.py"],
+      rejects: ["@o-t-p-y/sdk", "routers/otp.py", "npm install"],
+    },
+    {
+      name: "hybrid package.json + requirements.txt gets REST, not JS files",
+      setup: (dir) => {
+        writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "hybrid" }));
+        writeFileSync(join(dir, "requirements.txt"), "fastapi\nuvicorn\n");
+      },
+      expects: ["REST API: https://api.otpy.ir", "no npm package needed"],
+      rejects: ["@o-t-p-y/sdk", "npm install"],
+    },
+    {
       name: "php-laravel keeps REST instructions",
       setup: (dir) => {
         writeFileSync(

@@ -12,6 +12,7 @@ import {
   generateNextPagesTemplates,
   generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
+  generatePythonTemplates,
   generateSvelteKitTemplates,
   phpLaravelRoutesSnippet,
   type GeneratedFile,
@@ -87,8 +88,12 @@ async function runInit() {
     filesToGenerate = generateSvelteKitTemplates();
   } else if (info.framework === "express" || info.framework === "node-generic") {
     filesToGenerate = generateExpressTemplates(info.hasSrcDir, info.isTypeScript);
-  } else if (info.framework === "python-fastapi" || info.framework === "python-django") {
+  } else if (info.framework === "python-fastapi") {
     filesToGenerate = generatePythonFastApiTemplates();
+  } else if (info.framework === "python-django") {
+    // routers/otp.py is a FastAPI router — dead code in Django. Django gets
+    // the framework-neutral REST client instead.
+    filesToGenerate = generatePythonTemplates();
   } else if (info.framework === "go") {
     filesToGenerate = generateGoTemplates();
   } else if (info.framework === "php-laravel") {
@@ -151,6 +156,8 @@ async function runInit() {
 
   if (info.framework === "php-generic") {
     console.log(`
+🎉 Integration complete!
+
 For the full manual integration guide, see https://otpy.ir/docs
 Dashboard & live stats: https://dash.otpy.ir
 `);

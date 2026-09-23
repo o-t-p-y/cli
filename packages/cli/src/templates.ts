@@ -416,6 +416,59 @@ def verify_otp(req: VerifyOtpRequest):
   return [{ path: "routers/otp.py", content: code }];
 }
 
+// Framework-neutral Python client: works in FastAPI, Django, Flask, or plain
+// scripts — anything that can `pip install requests`. Django projects get this
+// instead of the FastAPI router, which is dead code outside FastAPI. Its
+// contents are written to disk only (never printed), so the CLI's
+// English-only terminal output invariant is unaffected by the docstrings.
+export function generatePythonTemplates(): GeneratedFile[] {
+  const code = `"""OTPy REST client - framework-neutral: works with FastAPI, Django, Flask, or plain scripts.
+
+Requires: pip install requests
+Reads OTPY_API_KEY (and optionally OTPY_BASE_URL) from the environment.
+"""
+
+import os
+
+import requests
+
+BASE_URL = os.getenv("OTPY_BASE_URL", "https://api.otpy.ir")
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {os.getenv('OTPY_API_KEY', '')}",
+        "Content-Type": "application/json",
+    }
+
+
+def send_otp(phone: str) -> dict:
+    """Send an OTP SMS. Returns the API response (request_id, free, ...)."""
+    res = requests.post(
+        f"{BASE_URL}/v1/otp/send",
+        json={"phone": phone},
+        headers=_headers(),
+        timeout=10,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+def verify_otp(phone: str, code: str) -> bool:
+    """Verify an OTP code. Returns the boolean verdict; a wrong code is not an error."""
+    res = requests.post(
+        f"{BASE_URL}/v1/otp/verify",
+        json={"phone": phone, "code": code},
+        headers=_headers(),
+        timeout=10,
+    )
+    res.raise_for_status()
+    return bool(res.json().get("verified", False))
+`;
+
+  return [{ path: "otpy_client.py", content: code }];
+}
+
 // Printed to the terminal via index.ts — keep this snippet ASCII-only so the
 // CLI's English-only output invariant holds. Never print other template
 // contents (they carry intentional Persian end-user error strings).
