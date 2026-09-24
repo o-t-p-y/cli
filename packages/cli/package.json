@@ -1,6 +1,6 @@
 {
   "name": "@o-t-p-y/cli",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": false,
   "type": "module",
   "description": "npx @o-t-p-y/cli init — one-command OTPy integration (framework detection, code patching, AI mode).",
