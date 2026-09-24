@@ -142,7 +142,7 @@ async function runInit() {
   }
 
   if (args.includes("--ai")) {
-    console.log(`\n🤖 AI assistant instructions (Cursor / Windsurf / Claude Code):`);
+    console.log(`\n🤖 AI assistant instructions (Claude Code / Codex / Cursor / Windsurf / Copilot):`);
     if (usesJsSdk(info.framework)) {
       console.log(`   - Library: @o-t-p-y/sdk`);
       console.log(`   - Send: otpy.sendOtp(phone) -> { request_id, ttl_seconds }`);
