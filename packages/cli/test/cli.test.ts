@@ -693,7 +693,9 @@ describe("otpy cli php-laravel template", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("php-generic");
-    expect(result.stdout).toContain("Integration complete!");
+    // Nothing was written, so the CLI must not claim the integration is complete.
+    expect(result.stdout).not.toContain("Integration complete!");
+    expect(result.stdout).toContain("Setup finished — no files generated");
     expect(result.stdout).toContain("https://otpy.ir/docs");
 
     const created = listFiles(tempDir).filter((f) => !before.includes(f));
