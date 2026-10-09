@@ -55,8 +55,9 @@ npx @o-t-p-y/cli init
 ```
 
 The wizard detects Next.js (App/Pages Router), SvelteKit, Express, Fastify/Koa/Hono,
-Python FastAPI/Django, Go, and PHP Laravel, then generates client + route handler
-files and wires your `OTPY_API_KEY` into `.env`. Unsupported stacks get a REST guide.
+Python FastAPI/Flask/Django (plus a generic Python client), Go, and PHP Laravel, then
+generates client + route handler files, installs `@o-t-p-y/sdk` for JavaScript stacks
+(skip with `--no-install`), and wires your `OTPY_API_KEY` into `.env`. Unsupported stacks get a REST guide.
 
 ## 📦 Packages
 

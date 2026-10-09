@@ -3,8 +3,10 @@ export interface GeneratedFile {
   content: string;
 }
 
-export function generateNextAppTemplates(hasSrc: boolean, isTs: boolean): GeneratedFile[] {
-  const prefix = hasSrc ? "src/" : "";
+// Route files sit five levels below the project (or src/) root, so a relative
+// import reaches lib/otpy without relying on a tsconfig "@/" path alias.
+export function generateNextAppTemplates(hasSrcApp: boolean, isTs: boolean): GeneratedFile[] {
+  const prefix = hasSrcApp ? "src/" : "";
   const ext = isTs ? "ts" : "js";
 
   const clientCode = isTs
@@ -23,7 +25,7 @@ export const otpy = new OtpyClient({
 
   const sendRouteCode = isTs
     ? `import { NextResponse } from "next/server";
-import { otpy } from "@/lib/otpy";
+import { otpy } from "../../../../../lib/otpy";
 
 export async function POST(request: Request) {
   try {
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
 }
 `
     : `import { NextResponse } from "next/server";
-import { otpy } from "@/lib/otpy";
+import { otpy } from "../../../../../lib/otpy";
 
 export async function POST(request) {
   try {
@@ -65,7 +67,7 @@ export async function POST(request) {
 
   const verifyRouteCode = isTs
     ? `import { NextResponse } from "next/server";
-import { otpy } from "@/lib/otpy";
+import { otpy } from "../../../../../lib/otpy";
 
 export async function POST(request: Request) {
   try {
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
 }
 `
     : `import { NextResponse } from "next/server";
-import { otpy } from "@/lib/otpy";
+import { otpy } from "../../../../../lib/otpy";
 
 export async function POST(request) {
   try {
@@ -417,9 +419,68 @@ def verify_otp(req: VerifyOtpRequest):
   return [{ path: "routers/otp.py", content: code }];
 }
 
+// Flask projects get a Blueprint mirroring the FastAPI router's routes.
+export function generatePythonFlaskTemplates(): GeneratedFile[] {
+  const code = `# Install dependencies: pip install requests flask
+# Wire it up in your app: from routes.otp import otp_bp; app.register_blueprint(otp_bp)
+
+import os
+
+import requests
+from flask import Blueprint, jsonify, request
+
+otp_bp = Blueprint("otp", __name__, url_prefix="/auth/otp")
+
+BASE_URL = os.getenv("OTPY_BASE_URL", "https://api.otpy.ir")
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {os.getenv('OTPY_API_KEY', '')}",
+        "Content-Type": "application/json",
+    }
+
+
+def _post(path: str, payload: dict):
+    res = requests.post(f"{BASE_URL}{path}", json=payload, headers=_headers(), timeout=10)
+    try:
+        body = res.json()
+    except ValueError:
+        body = {"error": f"HTTP {res.status_code}"}
+    return res, body
+
+
+@otp_bp.route("/send", methods=["POST"])
+def send_otp():
+    data = request.get_json(silent=True) or {}
+    phone = data.get("phone")
+    if not phone:
+        return jsonify({"error": "phone is required"}), 400
+    res, body = _post("/v1/otp/send", {"phone": phone})
+    return jsonify(body), res.status_code
+
+
+@otp_bp.route("/verify", methods=["POST"])
+def verify_otp():
+    data = request.get_json(silent=True) or {}
+    phone = data.get("phone")
+    code = data.get("code")
+    if not phone or not code:
+        return jsonify({"error": "phone and code are required"}), 400
+    res, body = _post("/v1/otp/verify", {"phone": phone, "code": code})
+    if not res.ok:
+        return jsonify(body), res.status_code
+    # TODO: verification passed - issue the user's session or login token here.
+    return jsonify({"verified": bool(body.get("verified", False))})
+`;
+
+  return [{ path: "routes/otp.py", content: code }];
+}
+
 // Framework-neutral Python client: works in FastAPI, Django, Flask, or plain
-// scripts — anything that can `pip install requests`. Django projects get this
-// instead of the FastAPI router, which is dead code outside FastAPI. Its
+// scripts — anything that can `pip install requests`. Django and generic
+// Python projects get this instead of the FastAPI router, which is dead code
+// outside FastAPI. Its
 // contents are written to disk only (never printed), so the CLI's
 // English-only terminal output invariant is unaffected by the docstrings.
 export function generatePythonTemplates(): GeneratedFile[] {

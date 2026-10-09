@@ -52,7 +52,7 @@ const { verified } = await otpy.verifyOtp("09123456789", "123456");
 npx @o-t-p-y/cli init
 ```
 
-ویزارد فریم‌ورک‌های Next.js (App/Pages Router)، SvelteKit، Express، Fastify/Koa/Hono، Python FastAPI/Django، Go و PHP Laravel را تشخیص می‌دهد، فایل‌های کلاینت و روت‌ها را می‌سازد و `OTPY_API_KEY` را در `.env` ذخیره می‌کند. برای استک‌های پشتیبانی‌نشده، راهنمای کامل REST چاپ می‌شود.
+ویزارد فریم‌ورک‌های Next.js (App/Pages Router)، SvelteKit، Express، Fastify/Koa/Hono، Python FastAPI/Flask/Django (و کلاینت عمومی پایتون)، Go و PHP Laravel را تشخیص می‌دهد، فایل‌های کلاینت و روت‌ها را می‌سازد، برای پروژه‌های جاوااسکریپتی `@o-t-p-y/sdk` را نصب می‌کند (با `--no-install` رد می‌شود) و `OTPY_API_KEY` را در `.env` ذخیره می‌کند. برای استک‌های پشتیبانی‌نشده، راهنمای کامل REST چاپ می‌شود.
 
 ## 📦 پکیج‌ها
 

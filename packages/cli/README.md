@@ -47,8 +47,13 @@ No config files. No global install. Nothing to remember.
 3. ✅ **Validates pasted keys** against `GET /v1/usage`: a key the API rejects is not saved;
    if the API is unreachable it is saved with a warning.
 4. 🗂️ **Generates integration files** for your stack, skipping anything that already exists.
-5. 🙈 **Protects your secrets** by adding the env file to `.gitignore` if it is not already ignored.
-6. 🎉 **Prints next steps** tailored to what it detected.
+   Next.js routes import `lib/otpy` with a relative path, so no `@/` alias is needed.
+5. 📥 **Installs `@o-t-p-y/sdk`** for JavaScript stacks with your package manager
+   (`packageManager` field, then the pnpm / yarn / bun / npm lockfile) when run in a terminal.
+   Without a terminal, or with `--no-install` / `OTPY_CLI_SKIP_INSTALL=1`, it prints the
+   right command instead; it skips this step when the SDK is already a dependency.
+6. 🙈 **Protects your secrets** by adding the env file to `.gitignore` if it is not already ignored.
+7. 🎉 **Prints next steps** tailored to what it detected.
 
 > **Works with any code stack.** Unsupported or hybrid projects still get a complete
 > REST integration guide (cURL examples included) — the wizard never leaves you empty-handed.
@@ -57,16 +62,21 @@ No config files. No global install. Nothing to remember.
 
 | Stack | Detected by | Generated files |
 |---|---|---|
-| **Next.js (App Router)** | `next` + `app/` | `lib/otpy.*`, `app/api/auth/otp/{send,verify}/route.*` |
+| **Next.js (App Router)** | `next` + `app/` (root `app/` wins over `src/app/`) | `lib/otpy.*`, `app/api/auth/otp/{send,verify}/route.*` (under `src/` for `src/app/`) |
 | **Next.js (Pages Router)** | `next` + `pages/` | `lib/otpy.*`, `pages/api/auth/otp/{send,verify}.*` |
 | **SvelteKit** | `@sveltejs/kit` | `src/lib/otpy.ts`, `src/routes/auth/otp/{send,verify}/+server.ts` |
 | **Express / Fastify / Koa / Hono** | JS server dep | `lib/otpy.*`, `routes/otp.*` |
 | **Node (generic)** | bare `package.json` | `lib/otpy.*`, `routes/otp.*` |
-| **Python (FastAPI)** | `pyproject.toml` / `requirements.txt` | `routers/otp.py` |
-| **Python (Django)** | `manage.py` | `otpy_client.py` (framework-neutral REST client) |
+| **Python (Django)** | `manage.py` or a `django` dependency | `otpy_client.py` (framework-neutral REST client) |
+| **Python (FastAPI)** | a `fastapi` dependency | `routers/otp.py` |
+| **Python (Flask)** | a `flask` dependency | `routes/otp.py` (an `otp_bp` Blueprint) |
+| **Python (generic)** | `pyproject.toml` / `requirements.txt` / `Pipfile`, no framework above | `otpy_client.py` (framework-neutral REST client) |
 | **Go** | `go.mod` | `pkg/otpy/client.go` |
 | **PHP (Laravel)** | `composer.json` + `artisan` | `config/otpy.php`, `app/Http/Controllers/OtpController.php`, `routes/api.php` |
 | **Anything else** | — | Printed REST + cURL guide (no files touched) |
+
+Python dependencies are read from `requirements.txt`, `pyproject.toml` (PEP 621 and
+Poetry) and `Pipfile`, ignoring case and `_`/`-` differences.
 
 Hybrid repos (for example `package.json` + `requirements.txt`) are detected by their
 non-JS markers, so mixed stacks get REST instructions instead of JavaScript files.
@@ -81,6 +91,7 @@ non-JS markers, so mixed stacks get REST instructions instead of JavaScript file
 | `npx @o-t-p-y/cli init --api-key <key>` | Non-interactive init with a supplied key. |
 | `npx @o-t-p-y/cli init --no-browser` | Print the login link instead of opening a browser (SSH, servers). |
 | `npx @o-t-p-y/cli init --ai` | Also print AI-assistant integration instructions. |
+| `npx @o-t-p-y/cli init --no-install` | Do not install `@o-t-p-y/sdk`; print the install command instead. |
 | `npx @o-t-p-y/cli test 09123456789` | Send a real test OTP and check billing. |
 | `npx @o-t-p-y/cli usage` | Show today's free/paid quota and daily limit. |
 | `npx @o-t-p-y/cli --version` | Print the CLI version. |
