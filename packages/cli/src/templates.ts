@@ -350,7 +350,7 @@ router.post("/send", async (req, res) => {
     if (!phone) return res.status(400).json({ error: "شماره موبایل الزامی است" });
     const result = await otpy.sendOtp(phone);
     return res.json(result);
-  } catch (err) {
+  } catch (err${isTs ? ": any" : ""}) {
     return res.status(err.status || 500).json({ error: err.code || "خطا در ارسال" });
   }
 });
@@ -361,7 +361,7 @@ router.post("/verify", async (req, res) => {
     if (!phone || !code) return res.status(400).json({ error: "شماره موبایل و کد الزامی است" });
     const result = await otpy.verifyOtp(phone, code);
     return res.json(result);
-  } catch (err) {
+  } catch (err${isTs ? ": any" : ""}) {
     return res.status(err.status || 500).json({ error: err.code || "خطا در تایید" });
   }
 });
@@ -376,7 +376,8 @@ export default router;
 }
 
 export function generatePythonFastApiTemplates(): GeneratedFile[] {
-  const code = `print("Install dependencies: pip install requests fastapi")
+  const code = `# Install dependencies: pip install requests fastapi
+# Wire it up in your app: app.include_router(otp.router)  (from routers import otp)
 
 import os
 import requests

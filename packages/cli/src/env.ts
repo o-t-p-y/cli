@@ -6,8 +6,13 @@ export function getExistingEnvKey(filePath: string, keyName: string = "OTPY_API_
   if (!existsSync(filePath)) return null;
   try {
     const content = readFileSync(filePath, "utf8");
-    const match = new RegExp(`^${keyName}=(.*)$`, "m").exec(content);
-    return match?.[1]?.trim() ?? null;
+    const match = new RegExp(`^(?:export\\s+)?${keyName}\\s*=(.*)$`, "m").exec(content);
+    const raw = match?.[1]?.trim();
+    if (!raw) return null;
+    // Accept KEY="value" / KEY='value' / KEY=value # comment, like dotenv does.
+    const quoted = /^(["'])(.*)\1/.exec(raw);
+    const value = quoted ? quoted[2] : raw.replace(/\s+#.*$/, "");
+    return value?.trim() || null;
   } catch {
     return null;
   }
@@ -19,7 +24,7 @@ export function appendOrUpdateEnvKey(filePath: string, keyName: string, keyValue
     content = readFileSync(filePath, "utf8");
   }
 
-  const regex = new RegExp(`^${keyName}=.*$`, "m");
+  const regex = new RegExp(`^(?:export\\s+)?${keyName}\\s*=.*$`, "m");
   if (regex.test(content)) {
     content = content.replace(regex, `${keyName}=${keyValue}`);
   } else {
@@ -78,6 +83,8 @@ export function ensureEnvFileIgnored(cwd: string, filePath: string): boolean {
 export interface ApiKeyValidation {
   ok: boolean;
   reason?: string;
+  /** true only when the API answered and refused the key (401/403), not when it was unreachable. */
+  rejected?: boolean;
 }
 
 /** Validate a key without making init fail when the API is unavailable. */
@@ -95,7 +102,11 @@ export async function validateApiKey(
     });
     return response.ok
       ? { ok: true }
-      : { ok: false, reason: `API returned HTTP ${response.status}` };
+      : {
+          ok: false,
+          reason: `API returned HTTP ${response.status}`,
+          rejected: response.status === 401 || response.status === 403,
+        };
   } catch (error) {
     return { ok: false, reason: `network check failed (${String(error)})` };
   } finally {
