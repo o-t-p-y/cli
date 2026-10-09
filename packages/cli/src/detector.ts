@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export type Framework =
   | "next-app"
@@ -129,6 +129,28 @@ function scanPipfile(text: string, deps: Set<string>): void {
   }
 }
 
+// Follows -r/--requirement includes relative to the including file, but never
+// outside the project directory; `seen` stops include cycles.
+function scanRequirements(root: string, file: string, deps: Set<string>, seen: Set<string>): void {
+  if (seen.has(file)) return;
+  seen.add(file);
+  const text = readText(file);
+  if (!text) return;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/(^|\s)#.*$/, "").trim();
+    const include = /^(?:-r|--requirement)(?:\s+|=)(\S+)$/.exec(line)?.[1];
+    if (include) {
+      const target = resolve(dirname(file), include);
+      const rel = relative(root, target);
+      if (rel && !rel.startsWith("..") && !isAbsolute(rel)) scanRequirements(root, target, deps, seen);
+      continue;
+    }
+    if (!line || line.startsWith("-")) continue; // -e, --index-url ...
+    const name = pep508Name(line);
+    if (name) deps.add(name);
+  }
+}
+
 /**
  * Normalised dependency names declared in requirements.txt, pyproject.toml
  * (PEP 621 and Poetry) and Pipfile. A plain-text scan, not a TOML parser:
@@ -137,15 +159,7 @@ function scanPipfile(text: string, deps: Set<string>): void {
 export function readPythonDeps(cwd: string = process.cwd()): Set<string> {
   const deps = new Set<string>();
 
-  const requirements = readText(join(cwd, "requirements.txt"));
-  if (requirements) {
-    for (const raw of requirements.split(/\r?\n/)) {
-      const line = raw.replace(/(^|\s)#.*$/, "").trim();
-      if (!line || line.startsWith("-")) continue; // -r, -e, --index-url ...
-      const name = pep508Name(line);
-      if (name) deps.add(name);
-    }
-  }
+  scanRequirements(cwd, join(cwd, "requirements.txt"), deps, new Set());
 
   const pyproject = readText(join(cwd, "pyproject.toml"));
   if (pyproject) scanPyproject(pyproject, deps);

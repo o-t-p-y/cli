@@ -702,6 +702,26 @@ describe("otpy cli python detection", () => {
     expect(deps.has("-r")).toBe(false);
   });
 
+  it("follows -r / --requirement includes relative to the including file", () => {
+    mkdirSync(join(tempDir, "requirements"));
+    writeFileSync(join(tempDir, "requirements.txt"), "-r requirements/prod.txt\n");
+    writeFileSync(join(tempDir, "requirements", "prod.txt"), "--requirement=base.txt\ngunicorn\n");
+    writeFileSync(join(tempDir, "requirements", "base.txt"), "Flask==3.0\n-r prod.txt\n");
+    expect(detectProject(tempDir).framework).toBe("python-flask");
+    expect(readPythonDeps(tempDir).has("gunicorn")).toBe(true);
+  });
+
+  it("ignores a -r include that escapes the project directory", () => {
+    const outside = mkdtempSync(join(tmpdir(), "otpy-outside-"));
+    try {
+      writeFileSync(join(outside, "reqs.txt"), "fastapi\n");
+      writeFileSync(join(tempDir, "requirements.txt"), `-r ${join(outside, "reqs.txt")}\n-r ../x.txt\n`);
+      expect(detectProject(tempDir).framework).toBe("python-generic");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("generates a Flask blueprint that calls the REST API", () => {
     const files = generatePythonFlaskTemplates();
     expect(files.map((f) => f.path)).toEqual(["routes/otp.py"]);
