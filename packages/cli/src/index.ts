@@ -3,9 +3,10 @@ import { dirname, join, relative } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import packageMetadata from "../package.json" with { type: "json" };
 import { LoginError, deviceLogin, type DeviceKeys } from "./auth.js";
-import { detectNextPagesRoot, detectProject, usesJsSdk, type Framework, type ProjectInfo } from "./detector.js";
+import { detectNextAppRoot, detectNextPagesRoot, detectProject, usesJsSdk, type Framework, type ProjectInfo } from "./detector.js";
 import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "./env.js";
 import { DASH_URL, apiBaseUrl, describeApiError, describeNetworkError, requestJson } from "./errors.js";
+import { SDK_PACKAGE, ensureSdk } from "./install.js";
 import { MCP_CLIENTS, MCP_CONFIG_LOCATIONS, isMcpClient, mcpConfigJson, writeCursorConfig, type McpClient } from "./mcp.js";
 import { promptSecret, stdinIsInteractive } from "./prompt.js";
 import {
@@ -15,6 +16,7 @@ import {
   generateNextPagesTemplates,
   generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
+  generatePythonFlaskTemplates,
   generatePythonTemplates,
   generateSvelteKitTemplates,
   phpLaravelRoutesSnippet,
@@ -139,8 +141,12 @@ function wiringHints(framework: Framework, info: ProjectInfo): string[] {
       return [`Register the router: from routers import otp; app.include_router(otp.router)`];
     case "php-laravel":
       return [`Laravel 11+: if routes/api.php is not loaded yet, run: php artisan install:api`];
+    case "python-flask":
+      return [`Register the blueprint: from routes.otp import otp_bp; app.register_blueprint(otp_bp)`];
     case "python-django":
       return [`Call send_otp / verify_otp from otpy_client.py in your views`];
+    case "python-generic":
+      return [`Call send_otp / verify_otp from otpy_client.py (pip install requests)`];
     default:
       return [];
   }
@@ -149,7 +155,7 @@ function wiringHints(framework: Framework, info: ProjectInfo): string[] {
 function templatesFor(info: ProjectInfo, cwd: string): GeneratedFile[] {
   switch (info.framework) {
     case "next-app":
-      return generateNextAppTemplates(info.hasSrcDir, info.isTypeScript);
+      return generateNextAppTemplates(detectNextAppRoot(cwd) === "src/app", info.isTypeScript);
     case "next-pages":
       return generateNextPagesTemplates(detectNextPagesRoot(cwd) === "src/pages", info.isTypeScript);
     case "sveltekit":
@@ -159,9 +165,12 @@ function templatesFor(info: ProjectInfo, cwd: string): GeneratedFile[] {
       return generateExpressTemplates(info.hasSrcDir, info.isTypeScript);
     case "python-fastapi":
       return generatePythonFastApiTemplates();
+    case "python-flask":
+      return generatePythonFlaskTemplates();
     case "python-django":
-      // routers/otp.py is a FastAPI router — dead code in Django. Django gets
-      // the framework-neutral REST client instead.
+    case "python-generic":
+      // routers/otp.py is a FastAPI router — dead code elsewhere. Django and
+      // plain Python projects get the framework-neutral REST client instead.
       return generatePythonTemplates();
     case "go":
       return generateGoTemplates();
@@ -291,7 +300,22 @@ async function runInit() {
 
   const steps: string[] = [];
   if (!apiKey) steps.push(`Get an API key: npx @o-t-p-y/cli login`);
-  if (usesJsSdk(info.framework)) steps.push(`Install the SDK: npm install @o-t-p-y/sdk`);
+  if (usesJsSdk(info.framework)) {
+    const sdk = ensureSdk({
+      cwd,
+      interactive: stdinIsInteractive(),
+      skip: has("--no-install") || Boolean(process.env.OTPY_CLI_SKIP_INSTALL),
+      onStart: (cmd) => console.log(`\n📥 Installing ${SDK_PACKAGE}: ${cmd}`),
+    });
+    if (sdk.kind === "installed") {
+      console.log(`✅ Installed ${SDK_PACKAGE}.`);
+    } else if (sdk.kind === "failed") {
+      console.log(`⚠️  Could not install ${SDK_PACKAGE}. Run it yourself: ${sdk.command}`);
+      steps.push(`Install the SDK: ${sdk.command}`);
+    } else if (sdk.kind === "manual") {
+      steps.push(`Install the SDK: ${sdk.command}`);
+    }
+  }
   steps.push(...wiringHints(info.framework, info));
   if (info.framework === "php-laravel") {
     steps.push(`Start the dev server: php artisan serve`);
@@ -395,6 +419,7 @@ Options:
   --no-browser         Print the login link instead of opening a browser (servers, SSH)
   --mcp [client]       Also set up the MCP server: ${MCP_CLIENTS.join(" | ")} (default: cursor)
   --ai                 init: print instructions for AI coding agents
+  --no-install         init: do not install @o-t-p-y/sdk (only print the command)
   --force              Save a key even if it fails the format or live check
   -h, --help           Show this help
   -v, --version        Show the CLI version
@@ -402,6 +427,7 @@ Options:
 Environment:
   OTPY_API_KEY         API key used when no --api-key is given
   OTPY_BASE_URL        API base URL (default: https://api.otpy.ir)
+  OTPY_CLI_SKIP_INSTALL  init: set to skip installing @o-t-p-y/sdk (same as --no-install)
 `;
 
 async function main(): Promise<void> {

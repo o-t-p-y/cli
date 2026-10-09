@@ -9,4 +9,5 @@ steps; `--mcp` wires the MCP server; `--ai` prints agent instructions.
 - Never write secrets into generated code — inject `OTPY_API_KEY` env reference.
 - Terminal output in English only (LTR-safe for every terminal and AI-agent TUI); emojis + monochrome stderr spinner, zero runtime deps. Persian lives only in generated end-user error strings (templates.ts — never print template contents to the terminal).
 - Never block without a TTY: no prompts when stdin is not interactive (CI, AI agents).
+- `init` installs `@o-t-p-y/sdk` (src/install.ts) only with a TTY and without `--no-install` / `OTPY_CLI_SKIP_INSTALL`; otherwise it prints the package-manager command.
 - Failures exit 1 with one actionable English line (src/errors.ts maps API error codes).

@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { detectNextPagesRoot, detectProject } from "../src/detector.js";
+import { detectNextAppRoot, detectNextPagesRoot, detectProject, readPythonDeps } from "../src/detector.js";
 import { appendOrUpdateEnvKey, ensureEnvFileIgnored, getExistingEnvKey, validateApiKey } from "../src/env.js";
 import {
   generateExpressTemplates,
@@ -14,6 +14,7 @@ import {
   generateNextPagesTemplates,
   generatePhpLaravelTemplates,
   generatePythonFastApiTemplates,
+  generatePythonFlaskTemplates,
   generatePythonTemplates,
   generateSvelteKitTemplates,
 } from "../src/templates.js";
@@ -541,6 +542,280 @@ describe("otpy cli next-pages template", () => {
   });
 });
 
+describe("otpy cli next-app imports", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-nextapp-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function writeNextApp(dir: string, layout: { rootApp?: boolean; srcApp?: boolean; src?: boolean }): void {
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "next-app-fixture", dependencies: { next: "15.0.0", react: "19.0.0" } }),
+    );
+    writeFileSync(join(dir, "tsconfig.json"), "{}");
+    if (layout.rootApp) mkdirSync(join(dir, "app"), { recursive: true });
+    if (layout.srcApp) mkdirSync(join(dir, "src", "app"), { recursive: true });
+    if (layout.src) mkdirSync(join(dir, "src", "components"), { recursive: true });
+  }
+
+  const variants: Array<[boolean, boolean]> = [
+    [false, true],
+    [true, true],
+    [false, false],
+    [true, false],
+  ];
+
+  for (const [srcApp, isTs] of variants) {
+    it(`route imports resolve to the generated lib file without the @/ alias (src=${srcApp}, ts=${isTs})`, () => {
+      const files = generateNextAppTemplates(srcApp, isTs);
+      const lib = files.find((f) => /lib\/otpy\.(ts|js)$/.test(f.path))!;
+      const ext = isTs ? ".ts" : ".js";
+
+      for (const file of files) {
+        expect(file.content).not.toContain("@/");
+      }
+      for (const route of files.filter((f) => f.path.endsWith(`route${ext}`))) {
+        const spec = /from "(\.[^"]+\/lib\/otpy)"/.exec(route.content)?.[1];
+        expect(spec, route.path).toBeDefined();
+        const resolved = resolve(dirname(join(tempDir, route.path)), spec!) + ext;
+        expect(resolved).toBe(join(tempDir, lib.path));
+      }
+    });
+  }
+
+  it("detects the app root with root app/ winning over src/app/", () => {
+    writeNextApp(tempDir, { rootApp: true, srcApp: true });
+    expect(detectNextAppRoot(tempDir)).toBe("app");
+
+    rmSync(join(tempDir, "app"), { recursive: true });
+    expect(detectNextAppRoot(tempDir)).toBe("src/app");
+
+    rmSync(join(tempDir, "src", "app"), { recursive: true });
+    expect(detectNextAppRoot(tempDir)).toBe("app");
+  });
+
+  it("init on a root app/ project with an unrelated src/ writes the root lib/otpy.ts", () => {
+    writeNextApp(tempDir, { rootApp: true, src: true });
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(existsSync(join(tempDir, "lib/otpy.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "app/api/auth/otp/send/route.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "app/api/auth/otp/verify/route.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "src/lib/otpy.ts"))).toBe(false);
+    expect(existsSync(join(tempDir, "src/app"))).toBe(false);
+  });
+
+  it("init on a src/app/ project writes under src/", () => {
+    writeNextApp(tempDir, { srcApp: true });
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(existsSync(join(tempDir, "src/lib/otpy.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "src/app/api/auth/otp/send/route.ts"))).toBe(true);
+    expect(existsSync(join(tempDir, "lib/otpy.ts"))).toBe(false);
+  });
+});
+
+describe("otpy cli python detection", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-python-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function listFiles(root: string): string[] {
+    return readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((entry) => statSync(join(root, entry)).isFile())
+      .sort();
+  }
+
+  const table: Array<{ name: string; files: Record<string, string>; framework: string }> = [
+    { name: "requirements fastapi with extras", files: { "requirements.txt": "FastAPI[all]>=0.110\nuvicorn\n" }, framework: "python-fastapi" },
+    { name: "requirements flask with casing and pin", files: { "requirements.txt": "# web\nFlask==3.0.2  # pinned\nrequests\n" }, framework: "python-flask" },
+    { name: "requirements flask extra", files: { "requirements.txt": "flask[async]>=2.0\n" }, framework: "python-flask" },
+    { name: "requirements flask plugin only is not flask", files: { "requirements.txt": "flask-cors\nrequests\n" }, framework: "python-generic" },
+    { name: "requirements django without manage.py", files: { "requirements.txt": "Django>=5\n" }, framework: "python-django" },
+    { name: "manage.py wins over fastapi", files: { "requirements.txt": "fastapi\n", "manage.py": "" }, framework: "python-django" },
+    { name: "fastapi wins over flask", files: { "requirements.txt": "flask\nfastapi\n" }, framework: "python-fastapi" },
+    { name: "bare requirements", files: { "requirements.txt": "requests\nnumpy\n" }, framework: "python-generic" },
+    { name: "empty pyproject", files: { "pyproject.toml": "[project]\nname = \"x\"\n" }, framework: "python-generic" },
+    {
+      name: "PEP 621 multi-line dependencies",
+      files: { "pyproject.toml": '[project]\nname = "x"\ndependencies = [\n  "Flask>=3",\n  "gunicorn",\n]\n' },
+      framework: "python-flask",
+    },
+    {
+      name: "PEP 621 inline dependencies with extras",
+      files: { "pyproject.toml": '[project]\nname = "x"\ndependencies = ["uvicorn[standard]", "fastapi"]\n' },
+      framework: "python-fastapi",
+    },
+    {
+      name: "PEP 621 optional dependencies",
+      files: { "pyproject.toml": '[project]\nname = "x"\n\n[project.optional-dependencies]\nweb = ["flask"]\n' },
+      framework: "python-flask",
+    },
+    {
+      name: "poetry dependencies",
+      files: { "pyproject.toml": '[tool.poetry]\nname = "x"\n\n[tool.poetry.dependencies]\npython = "^3.12"\nFastAPI = { version = "^0.110", extras = ["all"] }\n' },
+      framework: "python-fastapi",
+    },
+    {
+      name: "a framework name outside a dependency section is ignored",
+      files: { "pyproject.toml": '[project]\nname = "flask"\ndescription = "fastapi"\n\n[tool.ruff]\nflask = 1\n' },
+      framework: "python-generic",
+    },
+    {
+      name: "Pipfile packages",
+      files: { Pipfile: '[[source]]\nurl = "https://pypi.org/simple"\n\n[packages]\nflask = "*"\n' },
+      framework: "python-flask",
+    },
+  ];
+
+  for (const row of table) {
+    it(`detects ${row.framework}: ${row.name}`, () => {
+      for (const [name, content] of Object.entries(row.files)) writeFileSync(join(tempDir, name), content);
+      expect(detectProject(tempDir).framework).toBe(row.framework);
+    });
+  }
+
+  it("readPythonDeps normalises case and _/- across requirements, pyproject and Pipfile", () => {
+    writeFileSync(join(tempDir, "requirements.txt"), "-r base.txt\nFlask_Login==0.6\n");
+    writeFileSync(join(tempDir, "pyproject.toml"), '[project]\ndependencies = ["Some_Pkg>=1"]\n');
+    writeFileSync(join(tempDir, "Pipfile"), "[dev-packages]\nPyTest = \"*\"\n");
+    const deps = readPythonDeps(tempDir);
+    expect(deps.has("flask-login")).toBe(true);
+    expect(deps.has("some-pkg")).toBe(true);
+    expect(deps.has("pytest")).toBe(true);
+    expect(deps.has("-r")).toBe(false);
+  });
+
+  it("follows -r / --requirement includes relative to the including file", () => {
+    mkdirSync(join(tempDir, "requirements"));
+    writeFileSync(join(tempDir, "requirements.txt"), "-r requirements/prod.txt\n");
+    writeFileSync(join(tempDir, "requirements", "prod.txt"), "--requirement=base.txt\ngunicorn\n");
+    writeFileSync(join(tempDir, "requirements", "base.txt"), "Flask==3.0\n-r prod.txt\n");
+    expect(detectProject(tempDir).framework).toBe("python-flask");
+    expect(readPythonDeps(tempDir).has("gunicorn")).toBe(true);
+  });
+
+  it("ignores a -r include that escapes the project directory", () => {
+    const outside = mkdtempSync(join(tmpdir(), "otpy-outside-"));
+    try {
+      writeFileSync(join(outside, "reqs.txt"), "fastapi\n");
+      writeFileSync(join(tempDir, "requirements.txt"), `-r ${join(outside, "reqs.txt")}\n-r ../x.txt\n`);
+      expect(detectProject(tempDir).framework).toBe("python-generic");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("generates a Flask blueprint that calls the REST API", () => {
+    const files = generatePythonFlaskTemplates();
+    expect(files.map((f) => f.path)).toEqual(["routes/otp.py"]);
+    const code = files[0]!.content;
+    expect(code).toContain("otp_bp = Blueprint(");
+    expect(code).toContain("/v1/otp/send");
+    expect(code).toContain("/v1/otp/verify");
+    expect(code).toContain("os.getenv('OTPY_API_KEY'");
+    expect(code).not.toContain("otpy_test");
+    expect(code).not.toContain("fastapi");
+  });
+
+  it("init on a Flask project creates routes/otp.py and the blueprint hint", () => {
+    writeFileSync(join(tempDir, "requirements.txt"), "Flask==3.0\n");
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("python-flask");
+    expect(listFiles(tempDir).filter((f) => !before.includes(f) && f !== ".env")).toEqual(["routes/otp.py"]);
+    expect(result.stdout).toContain("app.register_blueprint(otp_bp)");
+    expect(result.stdout).not.toContain("npm install");
+  });
+
+  it("init on a generic Python project creates only the neutral client", () => {
+    writeFileSync(join(tempDir, "requirements.txt"), "requests\n");
+    const before = listFiles(tempDir);
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("python-generic");
+    expect(listFiles(tempDir).filter((f) => !before.includes(f) && f !== ".env")).toEqual(["otpy_client.py"]);
+    expect(result.stdout).toContain("otpy_client.py");
+    expect(existsSync(join(tempDir, "routers/otp.py"))).toBe(false);
+  });
+});
+
+describe("otpy cli SDK install step (stdin not a TTY)", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "otpy-cli-sdk-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function writeExpress(dir: string, extraDeps: Record<string, string> = {}): void {
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "express-fixture", dependencies: { express: "^4.19.2", ...extraDeps } }),
+    );
+  }
+
+  const lockfiles: Array<[string, string]> = [
+    ["pnpm-lock.yaml", "pnpm add @o-t-p-y/sdk"],
+    ["yarn.lock", "yarn add @o-t-p-y/sdk"],
+    ["bun.lockb", "bun add @o-t-p-y/sdk"],
+    ["package-lock.json", "npm install @o-t-p-y/sdk"],
+  ];
+
+  for (const [lockfile, command] of lockfiles) {
+    it(`prints "${command}" for a ${lockfile} project`, () => {
+      writeExpress(tempDir);
+      writeFileSync(join(tempDir, lockfile), "");
+
+      const result = runCliInit(tempDir);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`Install the SDK: ${command}`);
+      if (!command.startsWith("npm")) expect(result.stdout).not.toContain("npm install");
+    });
+  }
+
+  it("leaves out the install step when the SDK is already a dependency", () => {
+    writeExpress(tempDir, { "@o-t-p-y/sdk": "^0.3.0" });
+    writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+
+    const result = runCliInit(tempDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("Install the SDK");
+    expect(result.stdout).not.toContain("add @o-t-p-y/sdk");
+  });
+
+  it("documents --no-install in --help", () => {
+    const result = runCli(["--help"], tempDir);
+    expect(result.stdout).toContain("--no-install");
+  });
+});
+
 describe("otpy cli php-laravel template", () => {
   let tempDir: string;
 
@@ -796,6 +1071,20 @@ describe("otpy cli English-only output invariant", () => {
         writeFileSync(join(dir, "routes", "api.php"), "<?php\n// custom routes\n");
       },
       args: ["init", "--api-key", "otpy_test_key_123"],
+    },
+    {
+      name: "python-flask",
+      setup: (dir) => {
+        writeFileSync(join(dir, "requirements.txt"), "flask\n");
+      },
+      args: ["init", "--api-key", "otpy_test_key_123"],
+    },
+    {
+      name: "python-generic",
+      setup: (dir) => {
+        writeFileSync(join(dir, "pyproject.toml"), '[project]\nname = "x"\n');
+      },
+      args: ["init", "--ai", "--api-key", "otpy_test_key_123"],
     },
     {
       name: "init --ai",
