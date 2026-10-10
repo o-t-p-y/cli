@@ -49,13 +49,65 @@ describe("detectPackageManager", () => {
     });
   }
 
-  it("finds the workspace root lockfile from a nested package", () => {
-    writePkg(tempDir, { name: "root", private: true });
-    writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+  function nestedProject(): string {
     const nested = join(tempDir, "apps", "web");
     mkdirSync(nested, { recursive: true });
     writePkg(nested, { name: "web" });
-    expect(detectPackageManager(nested)).toBe("pnpm");
+    return nested;
+  }
+
+  it("finds a pnpm workspace root lockfile from a nested package", () => {
+    writePkg(tempDir, { name: "root", private: true });
+    writeFileSync(join(tempDir, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n");
+    writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+    expect(detectPackageManager(nestedProject())).toBe("pnpm");
+  });
+
+  it("finds a yarn workspaces root (array or object form) from a nested package", () => {
+    writePkg(tempDir, { name: "root", private: true, workspaces: { packages: ["apps/*"] } });
+    writeFileSync(join(tempDir, "yarn.lock"), "");
+    expect(detectPackageManager(nestedProject())).toBe("yarn");
+  });
+
+  it("uses the packageManager field of a workspace root", () => {
+    writePkg(tempDir, { name: "root", workspaces: ["apps/*"], packageManager: "bun@1.2.0" });
+    expect(detectPackageManager(nestedProject())).toBe("bun");
+  });
+
+  it("ignores a stray lockfile in a parent folder that is not a workspace root", () => {
+    writeFileSync(join(tempDir, "yarn.lock"), "");
+    expect(detectPackageManager(nestedProject())).toBe("npm");
+  });
+
+  it("ignores a stray package.json with a lockfile or packageManager in a parent folder", () => {
+    writePkg(tempDir, { packageManager: "pnpm@9.0.0" });
+    writeFileSync(join(tempDir, "package-lock.json"), "");
+    writeFileSync(join(tempDir, "yarn.lock"), "");
+    expect(detectPackageManager(nestedProject())).toBe("npm");
+  });
+
+  it("never reads the home folder or above it", () => {
+    const home = join(tempDir, "home");
+    const project = join(home, "app");
+    mkdirSync(project, { recursive: true });
+    writePkg(project, { name: "app" });
+    // Both a workspace root above home and home itself would otherwise match.
+    writePkg(tempDir, { name: "outer", workspaces: ["*"] });
+    writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+    writePkg(home, { name: "home", workspaces: ["*"] });
+    writeFileSync(join(home, "yarn.lock"), "");
+    expect(detectPackageManager(project, home)).toBe("npm");
+  });
+
+  it("stops at the git root", () => {
+    writePkg(tempDir, { name: "outer", workspaces: ["*"] });
+    writeFileSync(join(tempDir, "yarn.lock"), "");
+    const repo = join(tempDir, "repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    const project = join(repo, "app");
+    mkdirSync(project);
+    writePkg(project, { name: "app" });
+    expect(detectPackageManager(project)).toBe("npm");
   });
 });
 

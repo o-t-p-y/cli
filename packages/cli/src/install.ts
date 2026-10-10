@@ -3,6 +3,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export const SDK_PACKAGE = "@o-t-p-y/sdk";
@@ -55,19 +56,28 @@ function fromLockfile(dir: string): PackageManager | null {
   return null;
 }
 
+function isWorkspaceRoot(dir: string): boolean {
+  if (existsSync(join(dir, "pnpm-workspace.yaml"))) return true;
+  const workspaces = readPackageJson(dir)?.workspaces;
+  return Array.isArray(workspaces) || (typeof workspaces === "object" && workspaces !== null);
+}
+
 /**
  * The package.json `packageManager` field wins, then the lockfile (pnpm, yarn,
- * bun, npm). Walks up from cwd so a package inside a workspace uses the root's
- * manager; stops at the repository root (.git). Defaults to npm.
+ * bun, npm). A parent folder only counts when it is a workspace root, so a
+ * package inside a monorepo uses the root's manager but a stray lockfile in a
+ * parent (e.g. ~/package-lock.json) is ignored. Stops at the repository root
+ * (.git) and never reads the home folder or above. Defaults to npm.
  */
-export function detectPackageManager(cwd: string = process.cwd()): PackageManager {
+export function detectPackageManager(cwd: string = process.cwd(), home: string = homedir()): PackageManager {
+  const own = fromPackageManagerField(cwd) ?? fromLockfile(cwd);
+  if (own) return own;
   let dir = cwd;
   for (;;) {
-    const pm = fromPackageManagerField(dir) ?? fromLockfile(dir);
-    if (pm) return pm;
     const parent = dirname(dir);
-    if (parent === dir || existsSync(join(dir, ".git"))) return "npm";
+    if (parent === dir || existsSync(join(dir, ".git")) || parent === home || dir === home) return "npm";
     dir = parent;
+    if (isWorkspaceRoot(dir)) return fromPackageManagerField(dir) ?? fromLockfile(dir) ?? "npm";
   }
 }
 
